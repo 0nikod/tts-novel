@@ -1,0 +1,7 @@
+# Ignore locally added books and generated book data by default.
+*
+
+# Keep this ignore file and the maintained example book in the repository.
+!.gitignore
+!example-book/
+!example-book/**
