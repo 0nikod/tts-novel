@@ -32,7 +32,7 @@ novel-tts validate books/my-book
 novel-tts review books/my-book
 ```
 
-仓库内的 `books/example-book/` 提供了一份完整的双章节示例，包含跨章节场景、显式说话风格以及待人工审核的未知人物：
+仓库内的 `books/example-book/` 提供了一份完整的双章节《水浒传》节选示例，包含多场景划分、人物别名、内心独白、显式说话风格以及待人工审核的说话人：
 
 ```bash
 novel-tts validate books/example-book
