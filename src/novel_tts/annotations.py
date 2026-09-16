@@ -5,7 +5,7 @@ from typing import Any
 
 import yaml
 
-from .models import Annotation, LineRange, Segment, STYLE_FIELDS
+from .models import STYLE_FIELDS, Annotation, LineRange, Segment
 
 
 def load_annotation(path: Path) -> Annotation:
@@ -18,8 +18,7 @@ def load_annotation(path: Path) -> Annotation:
     root_extra = set(data) - {"chapter", "segments"}
     if root_extra:
         raise ValueError(
-            "annotation has unsupported fields: "
-            + ", ".join(sorted(map(str, root_extra)))
+            "annotation has unsupported fields: " + ", ".join(sorted(map(str, root_extra)))
         )
     if "chapter" not in data or "segments" not in data:
         raise ValueError("annotation requires chapter and segments")
@@ -35,14 +34,11 @@ def load_annotation(path: Path) -> Annotation:
     for index, item in enumerate(data["segments"], 1):
         if not isinstance(item, dict):
             raise ValueError(f"segment {index} must be a mapping")
-        allowed = {
-            "line", "name", "type", "style", "scene_id", "review", "review_reason"
-        }
+        allowed = {"line", "name", "type", "style", "scene_id", "review", "review_reason"}
         extra = set(item) - allowed
         if extra:
             raise ValueError(
-                f"segment {index} has unsupported fields: "
-                + ", ".join(sorted(map(str, extra)))
+                f"segment {index} has unsupported fields: " + ", ".join(sorted(map(str, extra)))
             )
         required = ("line", "name", "type", "style", "scene_id")
         missing = [key for key in required if key not in item]

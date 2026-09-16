@@ -10,7 +10,6 @@ from .book import Book
 from .preprocessing import preprocess_file, read_processed
 from .validation import validate_book
 
-
 app = typer.Typer(
     no_args_is_help=True,
     help="Prepare and validate novel text for TTS annotation.",
@@ -85,7 +84,9 @@ def preprocess(
     book = get_book(book_path)
     try:
         sources = (
-            [book.resolve_source_chapter(chapter)] if chapter is not None else book.source_chapters()
+            [book.resolve_source_chapter(chapter)]
+            if chapter is not None
+            else book.source_chapters()
         )
     except (ValueError, FileNotFoundError) as error:
         typer.echo(f"ERROR: {error}", err=True)
@@ -105,9 +106,7 @@ def preprocess(
 def validate_command(
     book_path: Path = typer.Argument(..., exists=True, file_okay=False),
     chapter: str | None = typer.Option(None, "--chapter", "-c", help="Numeric chapter"),
-    output_format: str = typer.Option(
-        "text", "--format", help="Output format: text or json"
-    ),
+    output_format: str = typer.Option("text", "--format", help="Output format: text or json"),
 ) -> None:
     """Validate processed text, people, scenes, and annotations."""
     if chapter is not None and not chapter.isdigit():

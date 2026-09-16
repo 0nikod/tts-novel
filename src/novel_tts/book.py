@@ -53,9 +53,7 @@ class Book:
         paths = list(directory.glob("*.txt")) if directory.exists() else []
         invalid = [path.name for path in paths if not path.stem.isdigit()]
         if invalid:
-            raise ValueError(
-                "chapter filenames must be numeric: " + ", ".join(sorted(invalid))
-            )
+            raise ValueError("chapter filenames must be numeric: " + ", ".join(sorted(invalid)))
         by_number: dict[int, Path] = {}
         for path in paths:
             number = int(path.stem)

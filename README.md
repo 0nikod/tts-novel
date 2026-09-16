@@ -59,3 +59,18 @@ novel-tts review BOOK
 ```
 
 校验器检查行号覆盖、segment 重叠、人物引用、scene 范围及顺序、style 字段和 review 标记。命令在存在结构错误时返回非零状态。
+
+## 开发检查
+
+```bash
+uv run --extra dev ruff check .
+uv run --extra dev ruff format --check .
+uv run --extra dev pytest
+```
+
+自动修复和格式化：
+
+```bash
+uv run --extra dev ruff check . --fix
+uv run --extra dev ruff format .
+```

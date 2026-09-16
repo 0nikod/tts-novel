@@ -9,14 +9,9 @@ def make_book(tmp_path: Path) -> Book:
     book.initialize()
     (book.source_dir / "001.txt").write_text("旁白。\n“你好。”\n", encoding="utf-8")
     (book.processed_dir / "001.txt").write_text("1-旁白。\n2-“你好。”\n", encoding="utf-8")
-    book.persons_path.write_text(
-        "# 小明\n\naliases: []\n\nrole: main\n", encoding="utf-8"
-    )
+    book.persons_path.write_text("# 小明\n\naliases: []\n\nrole: main\n", encoding="utf-8")
     book.scenes_path.write_text(
-        "scenes:\n"
-        "  - id: S0001\n"
-        "    line: '001:1-2'\n"
-        "    summary: 小明出现\n",
+        "scenes:\n  - id: S0001\n    line: '001:1-2'\n    summary: 小明出现\n",
         encoding="utf-8",
     )
     (book.annotations_dir / "001.yaml").write_text(
@@ -62,10 +57,7 @@ def test_reports_gap_unknown_person_and_scene_mismatch(tmp_path: Path) -> None:
 def test_detects_scene_range_out_of_bounds(tmp_path: Path) -> None:
     book = make_book(tmp_path)
     book.scenes_path.write_text(
-        "scenes:\n"
-        "  - id: S0001\n"
-        "    line: '001:1-9'\n"
-        "    summary: 错误范围\n",
+        "scenes:\n  - id: S0001\n    line: '001:1-9'\n    summary: 错误范围\n",
         encoding="utf-8",
     )
     messages = [issue.message for issue in validate_book(book)]

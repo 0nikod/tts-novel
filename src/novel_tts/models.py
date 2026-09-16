@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-
 TextType = Literal["narration", "dialogue", "thought"]
 REVIEW_REASONS = {
     "ambiguous_speaker",
@@ -37,7 +36,7 @@ class LineRange:
             raise ValueError("range end must not be less than range start")
 
     @classmethod
-    def parse(cls, value: int | str) -> "LineRange":
+    def parse(cls, value: int | str) -> LineRange:
         if isinstance(value, bool):
             raise ValueError("boolean is not a line number")
         if isinstance(value, int):
@@ -53,7 +52,7 @@ class LineRange:
     def format(self) -> int | str:
         return self.start if self.start == self.end else f"{self.start}-{self.end}"
 
-    def contains(self, other: "LineRange") -> bool:
+    def contains(self, other: LineRange) -> bool:
         return self.start <= other.start and self.end >= other.end
 
 
@@ -63,7 +62,7 @@ class ChapterLineRange:
     lines: LineRange
 
     @classmethod
-    def parse(cls, value: str) -> "ChapterLineRange":
+    def parse(cls, value: str) -> ChapterLineRange:
         if not isinstance(value, str) or ":" not in value:
             raise ValueError("scene line must use chapter:line format")
         chapter, raw_lines = value.split(":", 1)
@@ -91,8 +90,7 @@ class Scene:
 
     def covers(self, chapter: str, lines: LineRange) -> bool:
         return any(
-            int(ref.chapter) == int(chapter) and ref.lines.contains(lines)
-            for ref in self.line
+            int(ref.chapter) == int(chapter) and ref.lines.contains(lines) for ref in self.line
         )
 
 
@@ -107,8 +105,10 @@ class Segment:
     review_reason: str | None = None
 
     def merge_key(self) -> tuple[Any, ...]:
-        style = None if self.style is None else tuple(
-            (key, self.style.get(key)) for key in STYLE_FIELDS
+        style = (
+            None
+            if self.style is None
+            else tuple((key, self.style.get(key)) for key in STYLE_FIELDS)
         )
         return (
             self.name,

@@ -8,7 +8,6 @@ import yaml
 
 from .models import ChapterLineRange, Scene
 
-
 SCENE_ID_RE = re.compile(r"^S(\d{4,})$")
 
 
@@ -30,8 +29,7 @@ def load_scenes(path: Path) -> list[Scene]:
         extra = set(item) - {"id", "line", "summary"}
         if extra:
             raise ValueError(
-                f"scene {index} has unsupported fields: "
-                + ", ".join(sorted(map(str, extra)))
+                f"scene {index} has unsupported fields: " + ", ".join(sorted(map(str, extra)))
             )
         try:
             scene_id = item["id"]

@@ -3,8 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .models import Person, SYSTEM_NAMES
-
+from .models import SYSTEM_NAMES, Person
 
 HEADING_RE = re.compile(r"^#\s+(.+?)\s*$")
 ALIAS_RE = re.compile(r"^\s*-\s+(.+?)\s*$")
@@ -56,8 +55,10 @@ def load_persons(path: Path) -> list[Person]:
 def save_persons(path: Path, people: list[Person]) -> None:
     sections: list[str] = []
     for person in people:
-        aliases = "aliases: []" if not person.aliases else "aliases:\n" + "\n".join(
-            f"  - {alias}" for alias in person.aliases
+        aliases = (
+            "aliases: []"
+            if not person.aliases
+            else "aliases:\n" + "\n".join(f"  - {alias}" for alias in person.aliases)
         )
         role = person.role or "unknown"
         sections.append(f"# {person.name}\n\n{aliases}\n\nrole: {role}\n")

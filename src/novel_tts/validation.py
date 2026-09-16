@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import re
 from collections import Counter
+from collections.abc import Iterable
+from contextlib import suppress
 from pathlib import Path
-from typing import Iterable
 
 import yaml
 
@@ -13,7 +13,6 @@ from .models import REVIEW_REASONS, STYLE_FIELDS, SYSTEM_NAMES, ValidationIssue
 from .persons import load_persons
 from .preprocessing import read_processed
 from .scenes import SCENE_ID_RE, load_scenes
-
 
 VALID_TYPES = {"narration", "dialogue", "thought"}
 
@@ -97,10 +96,8 @@ class Validator:
                     continue
                 path = self.book.processed_dir / source_path.name
                 if path.exists():
-                    try:
+                    with suppress(ValueError):
                         counts[stem] = len(read_processed(path))
-                    except ValueError:
-                        pass
         return counts
 
     def _validate_persons(self) -> set[str]:
@@ -160,9 +157,7 @@ class Validator:
             if not isinstance(config, dict):
                 self.error(path, f"voice {name!r} must be a mapping")
                 continue
-            forbidden = set(config) & {
-                "speaker_id", "speaker-id", "speaker_token", "speaker-token"
-            }
+            forbidden = set(config) & {"speaker_id", "speaker-id", "speaker_token", "speaker-token"}
             if forbidden:
                 self.error(
                     path,
@@ -247,7 +242,7 @@ class Validator:
         scene_indexes: dict[str, int],
         chapter: str | None,
     ) -> None:
-        for stem, source_path in source_by_stem.items():
+        for stem in source_by_stem:
             if chapter is not None and int(stem) != int(chapter):
                 continue
             if stem not in processed_counts:
@@ -317,9 +312,7 @@ class Validator:
             if overlaps:
                 self.error(path, f"multiply covered lines: {self._compact_numbers(overlaps)}")
 
-    def _validate_style(
-        self, path: Path, label: str, style: dict[str, str | None] | None
-    ) -> None:
+    def _validate_style(self, path: Path, label: str, style: dict[str, str | None] | None) -> None:
         if style is None:
             return
         unknown = set(style) - set(STYLE_FIELDS)

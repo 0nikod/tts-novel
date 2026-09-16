@@ -6,7 +6,6 @@ from pathlib import Path
 
 from .models import ProcessedLine
 
-
 OPEN_TO_CLOSE = {
     "“": "”",
     "‘": "’",
@@ -88,9 +87,7 @@ def preprocess_text(text: str) -> PreprocessResult:
             continue
         pieces, paragraph_warnings = split_direct_speech(paragraph)
         output.extend(pieces)
-        warnings.extend(
-            f"source line {source_number}: {warning}" for warning in paragraph_warnings
-        )
+        warnings.extend(f"source line {source_number}: {warning}" for warning in paragraph_warnings)
     return PreprocessResult(output, warnings)
 
 

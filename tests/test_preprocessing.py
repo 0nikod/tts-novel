@@ -24,7 +24,7 @@ def test_preprocess_example() -> None:
 
 
 def test_multiple_and_nested_quotes() -> None:
-    result = preprocess_text('他说：“她喊‘快走’，然后跑了。”“知道了。”')
+    result = preprocess_text("他说：“她喊‘快走’，然后跑了。”“知道了。”")
     assert result.lines == ["他说：", "“她喊‘快走’，然后跑了。”", "“知道了。”"]
     assert result.warnings == []
 
