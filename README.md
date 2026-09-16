@@ -32,6 +32,13 @@ novel-tts validate books/my-book
 novel-tts review books/my-book
 ```
 
+仓库内的 `books/example-book/` 提供了一份完整的双章节示例，包含跨章节场景、显式说话风格以及待人工审核的未知人物：
+
+```bash
+novel-tts validate books/example-book
+novel-tts review books/example-book
+```
+
 ## 数据约定
 
 ```text

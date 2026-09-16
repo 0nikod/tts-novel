@@ -1,0 +1,11 @@
+小明:
+  reference_id: xiaoming
+
+小红:
+  reference_id: xiaohong
+
+图书管理员:
+  reference_id: librarian
+
+NARRATOR:
+  reference_id: narrator
