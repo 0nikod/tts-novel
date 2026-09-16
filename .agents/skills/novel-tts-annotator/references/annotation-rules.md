@@ -2,7 +2,7 @@
 
 ## Speaker (`name`)
 
-Use the canonical heading from `persons.md`.
+Use the canonical `name` from the `persons` list in `persons.yaml`.
 
 Evidence priority:
 

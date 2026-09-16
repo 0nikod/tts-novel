@@ -1,6 +1,6 @@
 ---
 name: novel-tts-annotator
-description: Annotates preprocessed Chinese novel chapters for TTS by assigning speakers, text types, explicit speaking styles, and linear scenes; updates persons.md, scenes.yaml, and annotations/*.yaml, then validates them. Use when asked to mark, annotate, continue, inspect, or correct a novel under books/ for the novel TTS workflow.
+description: Annotates preprocessed Chinese novel chapters for TTS by assigning speakers, text types, explicit speaking styles, and linear scenes; updates persons.yaml, scenes.yaml, and annotations/*.yaml, then validates them. Use when asked to mark, annotate, continue, inspect, or correct a novel under books/ for the novel TTS workflow.
 compatibility: Requires the novel-tts project CLI and its standard book directory layout.
 ---
 
@@ -14,7 +14,7 @@ Read [annotation rules](references/annotation-rules.md) before making semantic d
 
 For chapter `<C>`, read all of:
 
-1. `<book>/persons.md`
+1. `<book>/persons.yaml`
 2. `<book>/scenes.yaml`
 3. `<book>/processed/<C>.txt`
 4. `<book>/annotations/<C>.yaml` when it already exists
@@ -38,7 +38,7 @@ novel-tts preprocess <book> --chapter <C>
 
 ### 1. Establish context
 
-Build a working list of canonical person names and aliases from `persons.md`. Inspect existing scene IDs and identify the last scene before this chapter. If an existing annotation is present, preserve confirmed human choices unless they violate the schema or the user explicitly asks for re-annotation.
+Build a working list of canonical person names and aliases from `persons.yaml`. Inspect existing scene IDs and identify the last scene before this chapter. If an existing annotation is present, preserve confirmed human choices unless they violate the schema or the user explicitly asks for re-annotation.
 
 ### 2. Classify every processed line
 
@@ -55,7 +55,7 @@ Use `NARRATOR` for narration and `UNKNOWN` when the person genuinely cannot be r
 
 ### 3. Maintain people
 
-When the text establishes a new named person, add a `# name` section to `persons.md`. Add textual variants under `aliases`. Do not create separate people for an alias, title, nickname, or pronoun. Do not declare `NARRATOR` or `UNKNOWN` in `persons.md`.
+When the text establishes a new named person, append an item containing `name`, `aliases`, and `role` to the `persons` list in `persons.yaml`. Add textual variants under `aliases`. Do not create separate people for an alias, title, nickname, or pronoun. Do not declare `NARRATOR` or `UNKNOWN` in `persons.yaml`.
 
 Do not invent biography, role, alias, or identity from weak evidence. For unresolved identity use `UNKNOWN` and human review.
 
@@ -98,7 +98,7 @@ Run:
 novel-tts validate <book> --chapter <C>
 ```
 
-Repair structural errors in `persons.md`, `scenes.yaml`, or the chapter annotation. Do not eliminate semantic uncertainty merely to make validation pass. Report remaining warnings and all review items to the user.
+Repair structural errors in `persons.yaml`, `scenes.yaml`, or the chapter annotation. Do not eliminate semantic uncertainty merely to make validation pass. Report remaining warnings and all review items to the user.
 
 ## Hard constraints
 

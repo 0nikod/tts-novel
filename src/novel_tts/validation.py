@@ -103,7 +103,7 @@ class Validator:
     def _validate_persons(self) -> set[str]:
         path = self.book.persons_path
         if not path.exists():
-            self.error(path, "persons.md is missing")
+            self.error(path, "persons.yaml is missing")
             return set(SYSTEM_NAMES)
         try:
             people = load_persons(path)

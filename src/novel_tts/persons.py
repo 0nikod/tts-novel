@@ -1,68 +1,67 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from .models import SYSTEM_NAMES, Person
-
-HEADING_RE = re.compile(r"^#\s+(.+?)\s*$")
-ALIAS_RE = re.compile(r"^\s*-\s+(.+?)\s*$")
-FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):\s*(.*?)\s*$")
 
 
 def load_persons(path: Path) -> list[Person]:
     if not path.exists():
         return []
-    people: list[Person] = []
-    current: Person | None = None
-    field: str | None = None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    except yaml.YAMLError as error:
+        raise ValueError(f"invalid YAML: {error}") from error
+    if not isinstance(data, dict) or not isinstance(data.get("persons"), list):
+        raise ValueError("root must be a mapping containing a persons list")
 
-    for number, raw in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
-        heading = HEADING_RE.match(raw)
-        if heading:
-            name = heading.group(1).strip()
-            if not name:
-                raise ValueError(f"line {number}: empty person name")
-            current = Person(name=name)
-            people.append(current)
-            field = None
-            continue
-        if not raw.strip() or raw.lstrip().startswith("<!--"):
-            continue
-        if current is None:
-            raise ValueError(f"line {number}: content before first person heading")
-        match = FIELD_RE.match(raw)
-        if match:
-            field, value = match.groups()
-            if field in {"speaker_id", "speaker-id", "speaker_token", "speaker-token"}:
-                raise ValueError(f"line {number}: {field} must not be persisted")
-            if field == "aliases":
-                if value not in ("", "[]"):
-                    raise ValueError(f"line {number}: aliases must be a list")
-                current.aliases = []
-            elif field == "role":
-                current.role = value or None
-            # Unknown fields are tolerated so confirmed metadata can be extended.
-            continue
-        alias = ALIAS_RE.match(raw)
-        if alias and field == "aliases":
-            current.aliases.append(alias.group(1).strip())
-            continue
-        raise ValueError(f"line {number}: unsupported persons.md syntax")
+    people: list[Person] = []
+    for index, item in enumerate(data["persons"], 1):
+        if not isinstance(item, dict):
+            raise ValueError(f"person {index} must be a mapping")
+        extra = set(item) - {"name", "aliases", "role"}
+        if extra:
+            raise ValueError(
+                f"person {index} has unsupported fields: " + ", ".join(sorted(map(str, extra)))
+            )
+        missing = {"name", "aliases", "role"} - set(item)
+        if missing:
+            raise ValueError(
+                f"person {index} is missing fields: " + ", ".join(sorted(map(str, missing)))
+            )
+
+        name = item["name"]
+        aliases = item["aliases"]
+        role = item["role"]
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"person {index}: name must be a non-empty string")
+        if not isinstance(aliases, list) or any(
+            not isinstance(alias, str) or not alias.strip() for alias in aliases
+        ):
+            raise ValueError(f"person {index}: aliases must be a list of non-empty strings")
+        if role is not None and (not isinstance(role, str) or not role.strip()):
+            raise ValueError(f"person {index}: role must be a non-empty string or null")
+        people.append(Person(name=name, aliases=aliases, role=role))
     return people
 
 
+def person_to_dict(person: Person) -> dict[str, Any]:
+    return {
+        "name": person.name,
+        "aliases": person.aliases,
+        "role": person.role,
+    }
+
+
 def save_persons(path: Path, people: list[Person]) -> None:
-    sections: list[str] = []
-    for person in people:
-        aliases = (
-            "aliases: []"
-            if not person.aliases
-            else "aliases:\n" + "\n".join(f"  - {alias}" for alias in person.aliases)
-        )
-        role = person.role or "unknown"
-        sections.append(f"# {person.name}\n\n{aliases}\n\nrole: {role}\n")
-    path.write_text("\n".join(sections), encoding="utf-8")
+    data = {"persons": [person_to_dict(person) for person in people]}
+    path.write_text(
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=1000),
+        encoding="utf-8",
+    )
 
 
 def person_names(people: list[Person]) -> set[str]:

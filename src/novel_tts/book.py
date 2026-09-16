@@ -22,7 +22,7 @@ class Book:
 
     @property
     def persons_path(self) -> Path:
-        return self.root / "persons.md"
+        return self.root / "persons.yaml"
 
     @property
     def scenes_path(self) -> Path:
@@ -39,7 +39,7 @@ class Book:
                 directory.mkdir(parents=True)
                 created.append(directory)
         defaults = {
-            self.persons_path: "",
+            self.persons_path: "persons: []\n",
             self.scenes_path: "scenes: []\n",
             self.voices_path: "{}\n",
         }

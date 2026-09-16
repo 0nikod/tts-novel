@@ -1,20 +1,16 @@
 # Canonical file examples
 
-## persons.md
+## persons.yaml
 
-```markdown
-# 小明
-
-aliases:
-  - 明明
-
-role: main
-
-# 小红
-
-aliases: []
-
-role: secondary
+```yaml
+persons:
+  - name: 小明
+    aliases:
+      - 明明
+    role: main
+  - name: 小红
+    aliases: []
+    role: secondary
 ```
 
 `NARRATOR` and `UNKNOWN` are reserved and are not declared here.

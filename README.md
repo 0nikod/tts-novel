@@ -46,10 +46,22 @@ books/my-book/
 ├── source/          # 原始正文，只读
 ├── processed/       # 拆分引语并添加章节内行号
 ├── annotations/     # 每章 segment 标记
-├── persons.md       # 人物标准名称、别名和角色
+├── persons.yaml     # 人物标准名称、别名和角色
 ├── scenes.yaml      # 全书线性场景
 └── voices.yaml      # name 到 reference_id 的映射
 ```
+
+`persons.yaml` 使用列表保存人物标准名称、别名和角色：
+
+```yaml
+persons:
+  - name: 小明
+    aliases:
+      - 明明
+    role: main
+```
+
+`NARRATOR` 和 `UNKNOWN` 是保留名称，不写入 `persons.yaml`。
 
 `source/*.txt` 文件名必须是纯数字。排序按其数值进行；`001.txt` 与 `1.txt` 会被视为重复章节。
 

@@ -9,7 +9,9 @@ def make_book(tmp_path: Path) -> Book:
     book.initialize()
     (book.source_dir / "001.txt").write_text("旁白。\n“你好。”\n", encoding="utf-8")
     (book.processed_dir / "001.txt").write_text("1-旁白。\n2-“你好。”\n", encoding="utf-8")
-    book.persons_path.write_text("# 小明\n\naliases: []\n\nrole: main\n", encoding="utf-8")
+    book.persons_path.write_text(
+        "persons:\n  - name: 小明\n    aliases: []\n    role: main\n", encoding="utf-8"
+    )
     book.scenes_path.write_text(
         "scenes:\n  - id: S0001\n    line: '001:1-2'\n    summary: 小明出现\n",
         encoding="utf-8",
