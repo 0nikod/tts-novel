@@ -79,6 +79,45 @@ novel-tts review BOOK
 
 校验器检查行号覆盖、segment 重叠、人物引用、scene 范围及顺序、style 字段和 review 标记。命令在存在结构错误时返回非零状态。
 
+## Render 层
+
+Render 配置与标记数据隔离，位于每本书的 `render/` 目录：
+
+```text
+render/
+├── config.yaml              # 模型 profile、输出和审核策略
+├── styles.yaml              # 通用 style 到模型控制指令的覆盖映射
+├── voices/                  # 模型专属音色配置
+├── cache/                   # 生成缓存，不提交
+├── manifests/               # 可复现清单，不提交
+└── output/                  # segment、scene、chapter 和全书音频，不提交
+```
+
+Renderer 不写入 `processed/`、`annotations/`、`persons.yaml`、`scenes.yaml` 或根目录的 `voices.yaml`。Fish profile 可以继续只读使用原有 `voices.yaml`；MiMo 的预置、文字设计和克隆音色分别使用 render 专属文件。
+
+模型能力按具体 model 校验，而不是只按供应商判断。当前注册了 Fish Audio `s2-pro`/`s2.1-pro` 和 MiMo 的 preset、voicedesign、voiceclone 三类模型。声音模式或流式模式不兼容时会在付费请求前失败，不会静默降级。
+
+```bash
+# 查看已知模型能力
+novel-tts render capabilities
+
+# 检查配置；不会调用 API
+novel-tts render validate-config books/my-book --profile fish-s2-pro
+
+# 显示任务数、字符数和缓存命中；不会调用 API
+novel-tts render plan books/my-book --profile mimo-preset
+
+# 执行与断点缓存
+FISH_AUDIO_API_KEY=... novel-tts render run books/my-book --profile fish-s2-pro
+MIMO_API_KEY=... novel-tts render run books/my-book --profile mimo-preset
+
+# 仅用现有 segment WAV 重新拼接
+novel-tts render assemble books/my-book --profile fish-s2-pro
+novel-tts render status books/my-book --profile fish-s2-pro
+```
+
+渲染依赖系统中的 `ffmpeg`。默认遇到 `review: true` 或 `UNKNOWN` 时阻止 API 请求；`--allow-review` 只放行已配置说话人的审核项，不会自动为 `UNKNOWN` 选择声音。
+
 ## 开发检查
 
 ```bash

@@ -8,12 +8,19 @@ import typer
 from .annotations import load_annotation
 from .book import Book
 from .preprocessing import preprocess_file, read_processed
+from .renderer.capabilities import all_capabilities
+from .renderer.config import load_render_config
+from .renderer.models import RenderIssue
+from .renderer.planner import build_render_plan, validate_render_configuration
+from .renderer.service import assemble_render, run_render
 from .validation import validate_book
 
 app = typer.Typer(
     no_args_is_help=True,
-    help="Prepare and validate novel text for TTS annotation.",
+    help="Prepare, validate, and render novel text for TTS.",
 )
+render_app = typer.Typer(no_args_is_help=True, help="Plan and run TTS rendering.")
+app.add_typer(render_app, name="render")
 
 
 def get_book(path: Path) -> Book:
@@ -180,6 +187,144 @@ def review(
             for number in range(segment.line.start, segment.line.end + 1):
                 typer.echo(f"  {number}-{text_by_line.get(number, '<missing>')}")
     typer.echo(f"Total review items: {total}")
+
+
+@render_app.command("capabilities")
+def render_capabilities() -> None:
+    """List model capabilities known to this renderer version."""
+    for capability in all_capabilities():
+        typer.echo(f"{capability.provider}/{capability.model}")
+        typer.echo("  voices: " + ", ".join(sorted(mode.value for mode in capability.voice_modes)))
+        typer.echo(
+            "  streaming: " + ", ".join(sorted(mode.value for mode in capability.streaming_modes))
+        )
+        typer.echo("  formats: " + ", ".join(sorted(capability.output_formats)))
+        typer.echo("  style: " + ", ".join(sorted(capability.style_controls)))
+
+
+@render_app.command("validate-config")
+def render_validate_config(
+    book_path: Path = typer.Argument(..., exists=True, file_okay=False),
+    profile: str | None = typer.Option(None, "--profile", "-p"),
+) -> None:
+    """Validate renderer configuration, voices, styles, and model capabilities."""
+    issues, config = validate_render_configuration(get_book(book_path))
+    if profile is not None and config is not None and profile not in config.profiles:
+        issues.append(RenderIssue("ERROR", f"render profile {profile!r} does not exist"))
+    _print_render_issues(issues)
+    if any(str(issue).startswith("ERROR") for issue in issues):
+        raise typer.Exit(1)
+    profile_count = len(config.profiles) if config is not None else 0
+    typer.echo(f"Render configuration is valid; {profile_count} profile(s) checked.")
+
+
+@render_app.command("plan")
+def render_plan_command(
+    book_path: Path = typer.Argument(..., exists=True, file_okay=False),
+    profile: str | None = typer.Option(None, "--profile", "-p"),
+    chapter: str | None = typer.Option(None, "--chapter", "-c"),
+    scene: str | None = typer.Option(None, "--scene"),
+    allow_review: bool = typer.Option(False, "--allow-review"),
+) -> None:
+    """Build a dry-run plan without calling a paid API."""
+    plan, config = build_render_plan(
+        get_book(book_path),
+        profile_id=profile,
+        chapter=chapter,
+        scene_id=scene,
+        allow_review=allow_review,
+    )
+    _print_render_issues(plan.issues)
+    characters = sum(len(job.source_text) for job in plan.jobs)
+    profiles = sorted({job.profile.id for job in plan.jobs})
+    cache_hits = (
+        sum((config.root / "cache" / f"{job.cache_key}.wav").exists() for job in plan.jobs)
+        if config is not None
+        else 0
+    )
+    typer.echo(
+        f"Plan: {len(plan.jobs)} job(s), {characters} character(s), "
+        f"cache={cache_hits} hit/{len(plan.jobs) - cache_hits} miss, "
+        f"profiles={','.join(profiles) or '-'}"
+    )
+    if plan.errors:
+        raise typer.Exit(1)
+
+
+@render_app.command("run")
+def render_run_command(
+    book_path: Path = typer.Argument(..., exists=True, file_okay=False),
+    profile: str | None = typer.Option(None, "--profile", "-p"),
+    chapter: str | None = typer.Option(None, "--chapter", "-c"),
+    scene: str | None = typer.Option(None, "--scene"),
+    allow_review: bool = typer.Option(False, "--allow-review"),
+    force: bool = typer.Option(False, "--force"),
+) -> None:
+    """Synthesize segments, use the cache, and assemble available audio."""
+    plan, manifest = run_render(
+        get_book(book_path),
+        profile_id=profile,
+        chapter=chapter,
+        scene_id=scene,
+        allow_review=allow_review,
+        force=force,
+    )
+    _print_render_issues(plan.issues)
+    if plan.errors:
+        raise typer.Exit(1)
+    completed = manifest.get("completed", 0)
+    failed = manifest.get("failed", 0)
+    typer.echo(f"Render complete: {completed} completed, {failed} failed")
+    if failed:
+        raise typer.Exit(1)
+
+
+@render_app.command("assemble")
+def render_assemble_command(
+    book_path: Path = typer.Argument(..., exists=True, file_okay=False),
+    profile: str | None = typer.Option(None, "--profile", "-p"),
+    chapter: str | None = typer.Option(None, "--chapter", "-c"),
+    scene: str | None = typer.Option(None, "--scene"),
+    allow_review: bool = typer.Option(False, "--allow-review"),
+) -> None:
+    """Reassemble existing segment WAV files without making API calls."""
+    plan, count = assemble_render(
+        get_book(book_path),
+        profile_id=profile,
+        chapter=chapter,
+        scene_id=scene,
+        allow_review=allow_review,
+    )
+    _print_render_issues(plan.issues)
+    if plan.errors:
+        raise typer.Exit(1)
+    typer.echo(f"Assembled {count} existing segment(s).")
+
+
+@render_app.command("status")
+def render_status_command(
+    book_path: Path = typer.Argument(..., exists=True, file_okay=False),
+    profile: str | None = typer.Option(None, "--profile", "-p"),
+) -> None:
+    """Show status from a render manifest."""
+    book = get_book(book_path)
+    try:
+        config = load_render_config(book.root)
+    except ValueError as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        raise typer.Exit(1) from error
+    target = profile or (config.default_profile if not config.person_routes else "routed")
+    path = config.root / "manifests" / f"{target}.json"
+    if not path.exists():
+        typer.echo(f"No manifest found for {target}.")
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
+    typer.echo(f"{target}: {data.get('completed', 0)} completed, {data.get('failed', 0)} failed")
+
+
+def _print_render_issues(issues: list[object]) -> None:
+    for issue in issues:
+        typer.echo(str(issue), err=str(issue).startswith("ERROR"))
 
 
 if __name__ == "__main__":

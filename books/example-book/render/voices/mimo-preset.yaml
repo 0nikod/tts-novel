@@ -1,0 +1,36 @@
+林冲:
+  kind: preset
+  voice: 白桦
+李小二:
+  kind: preset
+  voice: 苏打
+李小二妻子:
+  kind: preset
+  voice: 冰糖
+陆谦:
+  kind: preset
+  voice: 白桦
+富安:
+  kind: preset
+  voice: 苏打
+管营:
+  kind: preset
+  voice: 白桦
+差拨:
+  kind: preset
+  voice: 苏打
+老军:
+  kind: preset
+  voice: 白桦
+酒店主人:
+  kind: preset
+  voice: 苏打
+老庄客:
+  kind: preset
+  voice: 白桦
+庄客:
+  kind: preset
+  voice: 苏打
+NARRATOR:
+  kind: preset
+  voice: 冰糖
