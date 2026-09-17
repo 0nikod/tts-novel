@@ -53,6 +53,8 @@ Every processed line must be covered exactly once. A segment can contain only co
 
 Use `NARRATOR` for narration and `UNKNOWN` when the person genuinely cannot be resolved. Use canonical names in annotations, never aliases.
 
+Treat paratext sections such as `后记`, `作者后记`, `译者后记`, `作者注`, `译者注`, editorial notes, acknowledgements, and similar non-story material as a narrator-only region: assign `name: NARRATOR` to every line in the section, including quoted speech, signatures, and attributed remarks. Continue to classify each line's `type` from its textual form. Do not add people to `persons.yaml` solely because they are named or quoted in such a section.
+
 ### 3. Maintain people
 
 When the text establishes a new named person, append an item containing `name`, `aliases`, and `role` to the `persons` list in `persons.yaml`. Add textual variants under `aliases`. Do not create separate people for an alias, title, nickname, or pronoun. Do not declare `NARRATOR` or `UNKNOWN` in `persons.yaml`.
@@ -106,6 +108,7 @@ Repair structural errors in `persons.yaml`, `scenes.yaml`, or the chapter annota
 - Do not infer emotion, volume, pace, whispering, or vocal actions unless explicitly stated in the text.
 - Do not use location or time alone as a reason to split a scene.
 - Do not create non-contiguous segment line lists.
+- Do not assign character names inside narrator-only paratext sections.
 - Do not place person details, scene summaries,正文, voices, or speaker IDs in annotations.
 - Do not place location/time metadata in `scenes.yaml`.
 - Do not create a renderer or call a TTS service.

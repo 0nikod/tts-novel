@@ -15,6 +15,12 @@ Do not infer a speaker solely from stereotyped personality, gender, or likely be
 
 Narrative prose normally uses `NARRATOR`. A first-person narrator still uses `NARRATOR` for narration; use the canonical character name only for their direct dialogue or represented thought.
 
+### Narrator-only paratext
+
+When a section is headed or clearly identified as `后记`, `作者后记`, `译者后记`, `作者注`, `译者注`, an editorial note, acknowledgements, or similar non-story material, assign `name: NARRATOR` to every line until that section ends. This override also applies to quoted speech, signatures, names, and attributed remarks inside the section. Preserve the normal `type` decision (`narration`, `dialogue`, or `thought`) based on the textual form; only the speaker name is forced to `NARRATOR`.
+
+Do not add an author, translator, editor, relative, or other person to `persons.yaml` solely because they appear in narrator-only paratext. If the same person independently appears as a character in the story, their story occurrences still follow the normal speaker rules.
+
 ## Text type
 
 - `narration`: narrator exposition, action, description, and speech-attribution clauses.
