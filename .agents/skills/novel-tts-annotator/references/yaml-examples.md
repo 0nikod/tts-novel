@@ -70,25 +70,3 @@ segments:
 ```
 
 `line` is an integer for one line and `start-end` for a consecutive range. It is never a list in an annotation segment.
-
-## Shared narrator/extra voice
-
-When root `voices.yaml` already contains a narrator binding, copy it exactly:
-
-```yaml
-NARRATOR:
-  reference_id: narrator
-EXTRA:
-  reference_id: narrator
-```
-
-For an existing render-specific voice file, likewise duplicate the complete specification rather than choosing a new voice:
-
-```yaml
-NARRATOR:
-  kind: preset
-  voice: 冰糖
-EXTRA:
-  kind: preset
-  voice: 冰糖
-```

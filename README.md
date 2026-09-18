@@ -1,6 +1,6 @@
-# Novel TTS annotation tools
+# Novel TTS tools
 
-将小说 TXT 预处理为可由 LLM 标记并进行结构校验的数据。本项目暂不包含 TTS renderer。
+将小说 TXT 预处理为可由 LLM 标记和校验的语义数据，并通过独立 renderer 生成带精确时间轴的 TTS 音频。
 
 ## 安装
 
@@ -30,6 +30,12 @@ novel-tts status books/my-book
 ```bash
 novel-tts validate books/my-book
 novel-tts review books/my-book
+```
+
+使用独立 Skill 配置 renderer；仅配置和 dry-run，不会自动调用付费 API：
+
+```text
+/skill:novel-tts-renderer 为 books/my-book 配置 MiMo preset
 ```
 
 仓库内的 `books/example-book/` 提供了一份完整的双章节《孔乙己》示例，包含场景划分、人物分级、显式说话风格和 MiMo preset 渲染配置：
@@ -80,6 +86,8 @@ novel-tts review BOOK
 校验器检查行号覆盖、segment 重叠、人物引用、scene 范围及顺序、style 字段和 review 标记。命令在存在结构错误时返回非零状态。
 
 ## Render 层
+
+完整配置说明见 [Render configuration](docs/render-configuration.md)，模型和供应商字段见 [Renderer providers and models](docs/render-providers.md)。
 
 Render 配置与标记数据隔离，位于每本书的 `render/` 目录：
 

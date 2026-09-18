@@ -35,7 +35,7 @@ All minor characters intentionally collapse to the single canonical person `EXTR
 
 Use `UNKNOWN` with review when the unresolved speaker could be a main/secondary character rather than an extra. If every plausible speaker is incidental and distinguishing them has no effect on casting or continuity, use `EXTRA` without inventing an identity.
 
-The `EXTRA` voice binding must be an exact copy of `NARRATOR` in every existing root or render voice map. This is a casting rule, not permission to place voice metadata in annotations or `persons.yaml`.
+Voice assignment for `EXTRA` is a renderer concern. Do not read or modify voice mappings while annotating.
 
 ## Text type
 

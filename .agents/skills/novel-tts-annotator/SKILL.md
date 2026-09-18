@@ -1,12 +1,12 @@
 ---
 name: novel-tts-annotator
-description: Annotates preprocessed Chinese novel chapters for TTS by assigning speakers, character prominence, text types, explicit speaking styles, and linear scenes; updates persons.yaml, scenes.yaml, annotations/*.yaml, and shared narrator/extra voice bindings, then validates them. Use when asked to mark, annotate, continue, inspect, or correct a novel under books/ for the novel TTS workflow.
+description: Annotates preprocessed Chinese novel chapters for TTS by assigning speakers, character prominence, text types, explicit speaking styles, and linear scenes; updates persons.yaml, scenes.yaml, and annotations/*.yaml, then validates them. Use when asked to mark, annotate, continue, inspect, or correct a novel under books/ for the novel TTS workflow.
 compatibility: Requires the novel-tts project CLI and its standard book directory layout.
 ---
 
 # Novel TTS Annotator
 
-Annotate one book in numeric chapter order. The source text is immutable. Never create `speaker_id` values. Do not create renderer profiles or choose new voices; the only permitted voice-file edit is copying an existing `NARRATOR` binding to the unified `EXTRA` character as described below.
+Annotate one book in numeric chapter order. The source text is immutable. Never create `speaker_id` values. Annotation output is provider-neutral: do not read or modify render configuration, voice catalogs, voice selections, or provider-specific request data.
 
 Read [annotation rules](references/annotation-rules.md) before making semantic decisions. Read [YAML examples](references/yaml-examples.md) when creating or repairing files.
 
@@ -19,7 +19,6 @@ For chapter `<C>`, read all of:
 3. `<book>/processed/<C>.txt`
 4. `<book>/annotations/<C>.yaml` when it already exists
 5. The end of the previous processed chapter and its annotation when continuity is unclear
-6. `<book>/voices.yaml` and existing `<book>/render/voices/*.yaml` when present, solely to keep `EXTRA` bound to the narrator voice
 
 Do not read only isolated dialogue lines. Speaker, prominence, and scene decisions require surrounding and book-level context.
 
@@ -80,13 +79,6 @@ For each distinct `main` or `secondary` person established by the text, append a
 
 Do not invent biography, role, alias, or identity from weak evidence. Use `UNKNOWN` with human review when uncertainty could change whether the speaker is `EXTRA` or a distinct main/secondary character. Uncertainty only about which incidental minor person spoke may be annotated as `EXTRA` when that distinction has no effect on casting or narrative continuity.
 
-Keep the unified `EXTRA` voice identical to the narrator wherever voice mappings already exist:
-
-- In root `<book>/voices.yaml`, copy the complete `NARRATOR` mapping to `EXTRA`.
-- In each existing `<book>/render/voices/*.yaml`, copy the complete `NARRATOR` voice specification to `EXTRA`.
-- If no `NARRATOR` binding exists in a voice file, do not invent one; report that the shared voice could not be configured there.
-- Do not create render profiles, voice files, reference audio, or voice IDs for this purpose.
-
 ### 4. Maintain scenes
 
 A scene is a linear narrative event, not merely a place or time label. Continue the preceding scene when the event, conversation, and principal relationships remain continuous. Create a new scene for a clear narrative jump or independent event.
@@ -137,4 +129,4 @@ Repair structural errors in `persons.yaml`, `scenes.yaml`, or the chapter annota
 - Do not assign character names inside narrator-only paratext sections.
 - Do not place person details, scene summaries,正文, voices, or speaker IDs in annotations.
 - Do not place location/time metadata in `scenes.yaml`.
-- Do not create a renderer or call a TTS service. The only renderer-file change allowed is mirroring an existing `NARRATOR` specification to `EXTRA` in existing voice maps.
+- Do not read or modify renderer files and do not call a TTS service. Renderer setup belongs to the `novel-tts-renderer` skill.
