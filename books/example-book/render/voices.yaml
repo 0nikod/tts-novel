@@ -1,0 +1,30 @@
+voices:
+  孔乙己:
+    mimo-preset:
+      profile: mimo-preset
+      kind: preset
+      voice: 白桦
+
+  酒店伙计:
+    mimo-preset:
+      profile: mimo-preset
+      kind: preset
+      voice: 苏打
+
+  掌柜:
+    mimo-preset:
+      profile: mimo-preset
+      kind: preset
+      voice: 白桦
+
+  NARRATOR:
+    mimo-preset:
+      profile: mimo-preset
+      kind: preset
+      voice: 冰糖
+
+  EXTRA:
+    mimo-preset:
+      profile: mimo-preset
+      kind: preset
+      voice: 冰糖

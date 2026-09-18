@@ -54,7 +54,7 @@ def normalize_audio(
     if result.returncode != 0:
         temporary.unlink(missing_ok=True)
         raise ValueError(f"ffmpeg failed to normalize audio: {result.stderr.strip()[:500]}")
-    _validate_canonical_wave(temporary, output)
+    validate_canonical_wave(temporary, output)
     temporary.replace(destination)
 
 
@@ -77,7 +77,7 @@ def concatenate_wav(
         target.setsampwidth(2)
         target.setframerate(output.sample_rate)
         for path, gap_ms in inputs:
-            _validate_canonical_wave(path, output)
+            validate_canonical_wave(path, output)
             with wave.open(str(path), "rb") as source:
                 target.writeframes(source.readframes(source.getnframes()))
             silence_frames = round(output.sample_rate * gap_ms / 1000)
@@ -110,7 +110,7 @@ def transcode_final(source: Path, destination: Path) -> None:
     temporary.replace(destination)
 
 
-def _validate_canonical_wave(path: Path, output: OutputConfig) -> None:
+def validate_canonical_wave(path: Path, output: OutputConfig) -> None:
     try:
         with wave.open(str(path), "rb") as audio:
             if audio.getframerate() != output.sample_rate:

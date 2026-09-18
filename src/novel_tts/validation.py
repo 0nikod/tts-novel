@@ -136,7 +136,6 @@ class Validator:
     def _validate_voices(self, people_names: set[str]) -> None:
         path = self.book.voices_path
         if not path.exists():
-            self.warning(path, "voices.yaml is missing")
             return
         try:
             data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))

@@ -1,57 +1,16 @@
 persons:
-  - name: 林冲
-    aliases:
-      - 林教头
+  - name: 孔乙己
+    aliases: []
     role: main
 
-  - name: 李小二
-    aliases:
-      - 小二
-      - 小二哥
-      - 李二
+  - name: 酒店伙计
+    aliases: []
     role: secondary
 
-  - name: 李小二妻子
-    aliases:
-      - 大姐
-      - 老婆
-      - 浑家
-      - 李小二浑家
+  - name: 掌柜
+    aliases: []
     role: secondary
 
-  - name: 陆谦
-    aliases:
-      - 陆虞候
-    role: secondary
-
-  - name: 富安
+  - name: EXTRA
     aliases: []
-    role: minor
-
-  - name: 管营
-    aliases: []
-    role: minor
-
-  - name: 差拨
-    aliases: []
-    role: minor
-
-  - name: 老军
-    aliases: []
-    role: minor
-
-  - name: 酒店主人
-    aliases:
-      - 店主
-      - 主人
-    role: minor
-
-  - name: 老庄客
-    aliases:
-      - 老庄家
-    role: minor
-
-  - name: 庄客
-    aliases:
-      - 众庄客
     role: minor

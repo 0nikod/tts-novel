@@ -11,9 +11,12 @@ persons:
   - name: 小红
     aliases: []
     role: secondary
+  - name: EXTRA
+    aliases: []
+    role: minor
 ```
 
-`NARRATOR` and `UNKNOWN` are reserved and are not declared here.
+`NARRATOR` and `UNKNOWN` are reserved and are not declared here. All incidental minor characters use the one `EXTRA` entry; do not list their individual names as aliases.
 
 ## scenes.yaml
 
@@ -53,6 +56,11 @@ segments:
       vocal_action_after: null
     scene_id: S0001
   - line: 4
+    name: EXTRA
+    type: dialogue
+    style: null
+    scene_id: S0001
+  - line: 5
     name: UNKNOWN
     type: dialogue
     style: null
@@ -62,3 +70,25 @@ segments:
 ```
 
 `line` is an integer for one line and `start-end` for a consecutive range. It is never a list in an annotation segment.
+
+## Shared narrator/extra voice
+
+When root `voices.yaml` already contains a narrator binding, copy it exactly:
+
+```yaml
+NARRATOR:
+  reference_id: narrator
+EXTRA:
+  reference_id: narrator
+```
+
+For an existing render-specific voice file, likewise duplicate the complete specification rather than choosing a new voice:
+
+```yaml
+NARRATOR:
+  kind: preset
+  voice: 冰糖
+EXTRA:
+  kind: preset
+  voice: 冰糖
+```

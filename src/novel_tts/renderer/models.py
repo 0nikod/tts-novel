@@ -48,8 +48,6 @@ class RenderProfile:
     id: str
     provider: str
     model: str
-    voice_mode: VoiceMode
-    voice_file: Path
     api_key_env: str
     request: dict[str, Any]
     concurrency: int = 1
@@ -68,10 +66,17 @@ class OutputConfig:
 
 @dataclass(frozen=True)
 class AssemblyConfig:
+    chunk_gap_ms: int = 0
     dialogue_gap_ms: int = 180
     narration_gap_ms: int = 260
     scene_gap_ms: int = 800
     chapter_gap_ms: int = 1500
+
+
+@dataclass(frozen=True)
+class ExecutionConfig:
+    max_chars_per_request: int = 200
+    manifest_flush_interval_seconds: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -81,14 +86,36 @@ class ReviewPolicy:
 
 
 @dataclass(frozen=True)
+class TimelineConfig:
+    enabled: bool = True
+    include_silence_events: bool = True
+    subtitle_formats: tuple[str, ...] = ("srt", "vtt")
+    show_speaker: bool = True
+    include_narration: bool = True
+
+
+@dataclass(frozen=True)
 class RenderConfig:
     root: Path
-    default_profile: str
     profiles: dict[str, RenderProfile]
-    person_routes: dict[str, str] = field(default_factory=dict)
-    output: OutputConfig = OutputConfig()
-    assembly: AssemblyConfig = AssemblyConfig()
-    review: ReviewPolicy = ReviewPolicy()
+    output: OutputConfig = field(default_factory=OutputConfig)
+    assembly: AssemblyConfig = field(default_factory=AssemblyConfig)
+    execution: ExecutionConfig = field(default_factory=ExecutionConfig)
+    review: ReviewPolicy = field(default_factory=ReviewPolicy)
+    timeline: TimelineConfig = field(default_factory=TimelineConfig)
+
+
+@dataclass(frozen=True)
+class VoiceSource:
+    id: str
+    profile_id: str
+    voice: VoiceSpec
+
+
+@dataclass(frozen=True)
+class VoiceUsage:
+    default_profile: str
+    overrides: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -114,8 +141,12 @@ class RenderJob:
     review_reason: str | None
     profile: RenderProfile
     voice: VoiceSpec
+    voice_source: str
+    chunk_index: int
+    chunk_count: int
     compiled: CompiledStyle
     cache_key: str
+    legacy_cache_key: str | None = None
 
 
 @dataclass(frozen=True)

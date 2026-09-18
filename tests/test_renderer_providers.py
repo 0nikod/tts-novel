@@ -30,6 +30,9 @@ def make_job(profile: RenderProfile, voice: VoiceSpec, compiled: CompiledStyle) 
         review_reason=None,
         profile=profile,
         voice=voice,
+        voice_source="test-source",
+        chunk_index=1,
+        chunk_count=1,
         compiled=compiled,
         cache_key="hash",
     )
@@ -40,8 +43,6 @@ def test_fish_request_uses_reference_id_and_bracket_style(tmp_path: Path) -> Non
         id="fish",
         provider="fish_audio",
         model="s2-pro",
-        voice_mode=VoiceMode.SAVED_REFERENCE,
-        voice_file=tmp_path / "voices.yaml",
         api_key_env="FISH_AUDIO_API_KEY",
         request={"format": "wav", "chunk_length": 300},
     )
@@ -67,8 +68,6 @@ def test_mimo_preset_request_separates_instruction_and_spoken_text(tmp_path: Pat
         id="mimo",
         provider="mimo",
         model="mimo-v2.5-tts",
-        voice_mode=VoiceMode.PRESET,
-        voice_file=tmp_path / "voices.yaml",
         api_key_env="MIMO_API_KEY",
         request={"format": "wav", "stream": False},
     )
@@ -93,8 +92,6 @@ def test_mimo_voice_design_uses_description_instead_of_preset_voice(tmp_path: Pa
         id="mimo-design",
         provider="mimo",
         model="mimo-v2.5-tts-voicedesign",
-        voice_mode=VoiceMode.TEXT_DESIGN,
-        voice_file=tmp_path / "voices.yaml",
         api_key_env="MIMO_API_KEY",
         request={"format": "wav", "stream": False},
     )
@@ -121,8 +118,6 @@ def test_mimo_clone_encodes_reference_as_data_uri(tmp_path: Path) -> None:
         id="mimo-clone",
         provider="mimo",
         model="mimo-v2.5-tts-voiceclone",
-        voice_mode=VoiceMode.INLINE_CLONE,
-        voice_file=tmp_path / "voices.yaml",
         api_key_env="MIMO_API_KEY",
         request={"format": "wav", "stream": False},
     )

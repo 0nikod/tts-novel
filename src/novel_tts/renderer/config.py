@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -8,14 +10,30 @@ import yaml
 from .capabilities import get_capabilities
 from .models import (
     AssemblyConfig,
+    ExecutionConfig,
     OutputConfig,
     RenderConfig,
     RenderProfile,
     ReviewPolicy,
     StreamingMode,
+    TimelineConfig,
     VoiceMode,
+    VoiceSource,
     VoiceSpec,
+    VoiceUsage,
 )
+
+VOICE_ALLOWED_FIELDS = {
+    VoiceMode.PRESET: {"profile", "kind", "voice"},
+    VoiceMode.SAVED_REFERENCE: {"profile", "kind", "reference_id"},
+    VoiceMode.INLINE_CLONE: {
+        "profile",
+        "kind",
+        "reference_audio",
+        "reference_text",
+    },
+    VoiceMode.TEXT_DESIGN: {"profile", "kind", "description"},
+}
 
 
 def _load_yaml(path: Path) -> Any:
@@ -47,13 +65,9 @@ def load_render_config(book_root: Path) -> RenderConfig:
     data = _mapping(_load_yaml(path), "render config")
     _reject_extra(
         data,
-        {"default_profile", "profiles", "routing", "output", "assembly", "review"},
+        {"profiles", "output", "assembly", "execution", "review", "timeline"},
         "render config",
     )
-    default_profile = data.get("default_profile")
-    if not isinstance(default_profile, str) or not default_profile:
-        raise ValueError("render config requires a non-empty default_profile")
-
     raw_profiles = _mapping(data.get("profiles"), "profiles")
     profiles: dict[str, RenderProfile] = {}
     for profile_id, raw in raw_profiles.items():
@@ -63,8 +77,6 @@ def load_render_config(book_root: Path) -> RenderConfig:
             {
                 "provider",
                 "model",
-                "voice_mode",
-                "voice_file",
                 "api_key_env",
                 "request",
                 "concurrency",
@@ -76,28 +88,12 @@ def load_render_config(book_root: Path) -> RenderConfig:
         )
         provider = item.get("provider")
         model = item.get("model")
-        voice_mode_raw = item.get("voice_mode")
-        voice_file_raw = item.get("voice_file")
         api_key_env = item.get("api_key_env")
-        if not all(isinstance(value, str) and value for value in (provider, model, voice_mode_raw)):
-            raise ValueError(f"profile {profile_id} requires provider, model, and voice_mode")
-        if not isinstance(voice_file_raw, str) or not voice_file_raw:
-            raise ValueError(f"profile {profile_id} requires voice_file")
+        if not all(isinstance(value, str) and value for value in (provider, model)):
+            raise ValueError(f"profile {profile_id} requires provider and model")
         if not isinstance(api_key_env, str) or not api_key_env:
             raise ValueError(f"profile {profile_id} requires api_key_env")
-        try:
-            voice_mode = VoiceMode(voice_mode_raw)
-        except ValueError as error:
-            raise ValueError(
-                f"profile {profile_id} has invalid voice_mode {voice_mode_raw!r}"
-            ) from error
         capability = get_capabilities(provider, model)
-        if voice_mode not in capability.voice_modes:
-            supported = ", ".join(sorted(mode.value for mode in capability.voice_modes))
-            raise ValueError(
-                f"profile {profile_id}: {provider}/{model} does not support {voice_mode}; "
-                f"supported voice modes: {supported}"
-            )
         request = _mapping(item.get("request", {}), f"profile {profile_id}.request")
         stream = request.get("stream", False)
         if not isinstance(stream, bool):
@@ -124,12 +120,10 @@ def load_render_config(book_root: Path) -> RenderConfig:
             raise ValueError(
                 f"profile {profile_id}.style_policy.unsupported must be error or warn_and_omit"
             )
-        profile = RenderProfile(
+        profiles[profile_id] = RenderProfile(
             id=profile_id,
             provider=provider,
             model=model,
-            voice_mode=voice_mode,
-            voice_file=(render_root / voice_file_raw).resolve(),
             api_key_env=api_key_env,
             request=dict(request),
             concurrency=_positive_int(
@@ -141,63 +135,124 @@ def load_render_config(book_root: Path) -> RenderConfig:
             retries=_nonnegative_int(item.get("retries", 4), f"profile {profile_id}.retries"),
             unsupported_style=unsupported_style,
         )
-        profiles[profile_id] = profile
-    if default_profile not in profiles:
-        raise ValueError(f"default profile {default_profile!r} does not exist")
-
-    routing = _mapping(data.get("routing", {}), "routing")
-    _reject_extra(routing, {"persons"}, "routing")
-    person_routes = _mapping(routing.get("persons", {}), "routing.persons")
-    for name, profile_id in person_routes.items():
-        if not isinstance(profile_id, str) or profile_id not in profiles:
-            raise ValueError(f"routing for {name!r} references missing profile {profile_id!r}")
 
     output = _parse_output(_mapping(data.get("output", {}), "output"))
     assembly = _parse_assembly(_mapping(data.get("assembly", {}), "assembly"))
+    execution = _parse_execution(_mapping(data.get("execution", {}), "execution"))
     review = _parse_review(_mapping(data.get("review", {}), "review"))
+    timeline = _parse_timeline(_mapping(data.get("timeline", {}), "timeline"))
     return RenderConfig(
         root=render_root,
-        default_profile=default_profile,
         profiles=profiles,
-        person_routes=dict(person_routes),
         output=output,
         assembly=assembly,
+        execution=execution,
         review=review,
+        timeline=timeline,
     )
 
 
-def load_voice_file(profile: RenderProfile) -> dict[str, VoiceSpec]:
-    data = _mapping(_load_yaml(profile.voice_file), f"voice file {profile.voice_file}")
-    voices: dict[str, VoiceSpec] = {}
-    for name, raw in data.items():
-        item = _mapping(raw, f"voice {name}")
-        kind_raw = item.get("kind", profile.voice_mode.value)
-        try:
-            kind = VoiceMode(kind_raw)
-        except (TypeError, ValueError) as error:
-            raise ValueError(f"voice {name!r} has invalid kind {kind_raw!r}") from error
-        allowed = {
-            VoiceMode.PRESET: {"kind", "voice"},
-            VoiceMode.SAVED_REFERENCE: {"kind", "reference_id"},
-            VoiceMode.INLINE_CLONE: {"kind", "reference_audio", "reference_text"},
-            VoiceMode.TEXT_DESIGN: {"kind", "description"},
-        }[kind]
-        _reject_extra(item, allowed, f"voice {name}")
-        spec = VoiceSpec(
-            kind=kind,
-            voice=item.get("voice"),
-            reference_id=item.get("reference_id"),
-            reference_audio=(
-                (profile.voice_file.parent / item["reference_audio"]).resolve()
-                if isinstance(item.get("reference_audio"), str)
-                else None
-            ),
-            reference_text=item.get("reference_text"),
-            description=item.get("description"),
-        )
-        _validate_voice_spec(name, spec)
-        voices[name] = spec
-    return voices
+def load_voice_catalog(
+    render_root: Path, profiles: dict[str, RenderProfile]
+) -> dict[str, dict[str, VoiceSource]]:
+    path = render_root / "voices.yaml"
+    data = _mapping(_load_yaml(path), f"voice catalog {path}")
+    _reject_extra(data, {"voices"}, f"voice catalog {path}")
+    raw_voices = _mapping(data.get("voices"), "voices")
+    catalog: dict[str, dict[str, VoiceSource]] = {}
+    for name, raw_sources in raw_voices.items():
+        sources = _mapping(raw_sources, f"voice sources for {name}")
+        parsed_sources: dict[str, VoiceSource] = {}
+        for source_id, raw in sources.items():
+            item = _mapping(raw, f"voice {name}.{source_id}")
+            profile_id = item.get("profile")
+            if not isinstance(profile_id, str) or profile_id not in profiles:
+                raise ValueError(
+                    f"voice {name}.{source_id} references missing profile {profile_id!r}"
+                )
+            kind_raw = item.get("kind")
+            try:
+                kind = VoiceMode(kind_raw)
+            except (TypeError, ValueError) as error:
+                raise ValueError(
+                    f"voice {name}.{source_id} has invalid kind {kind_raw!r}"
+                ) from error
+            _reject_extra(item, VOICE_ALLOWED_FIELDS[kind], f"voice {name}.{source_id}")
+            spec = VoiceSpec(
+                kind=kind,
+                voice=item.get("voice"),
+                reference_id=item.get("reference_id"),
+                reference_audio=(
+                    (path.parent / item["reference_audio"]).resolve()
+                    if isinstance(item.get("reference_audio"), str)
+                    else None
+                ),
+                reference_text=item.get("reference_text"),
+                description=item.get("description"),
+            )
+            _validate_voice_spec(name, spec)
+            validate_voice_for_profile(name, spec, profiles[profile_id])
+            parsed_sources[source_id] = VoiceSource(source_id, profile_id, spec)
+        catalog[name] = parsed_sources
+    return catalog
+
+
+def load_voice_usage(
+    render_root: Path,
+    catalog: dict[str, dict[str, VoiceSource]],
+    profiles: dict[str, RenderProfile],
+) -> VoiceUsage:
+    path = render_root / "voice_used.yaml"
+    data = _mapping(_load_yaml(path), f"voice usage {path}")
+    _reject_extra(data, {"default_profile", "voices"}, f"voice usage {path}")
+    default_profile = data.get("default_profile")
+    if not isinstance(default_profile, str) or default_profile not in profiles:
+        raise ValueError(f"voice_used default_profile {default_profile!r} does not exist")
+    overrides = _mapping(data.get("voices", {}), "voice_used voices")
+    for name, source_id in overrides.items():
+        if name not in catalog:
+            raise ValueError(f"voice_used references unknown person {name!r}")
+        if not isinstance(source_id, str) or source_id not in catalog[name]:
+            raise ValueError(f"voice_used for {name!r} references missing source {source_id!r}")
+    return VoiceUsage(default_profile=default_profile, overrides=dict(overrides))
+
+
+def resolve_voice_source(
+    name: str,
+    catalog: dict[str, dict[str, VoiceSource]],
+    usage: VoiceUsage,
+    forced_profile: str | None = None,
+) -> VoiceSource:
+    sources = catalog.get(name)
+    if not sources:
+        raise ValueError(f"no voices are configured for {name!r}")
+    if forced_profile is None and name in usage.overrides:
+        return sources[usage.overrides[name]]
+    profile_id = forced_profile or usage.default_profile
+    matches = [source for source in sources.values() if source.profile_id == profile_id]
+    if not matches:
+        raise ValueError(f"voice {name!r} has no source for profile {profile_id!r}")
+    if len(matches) > 1:
+        raise ValueError(f"voice {name!r} has multiple sources for profile {profile_id!r}")
+    return matches[0]
+
+
+def render_target(profile_id: str | None, usage: VoiceUsage) -> str:
+    if profile_id is not None:
+        return profile_id
+    if not usage.overrides:
+        return usage.default_profile
+    selection = json.dumps(
+        {
+            "default_profile": usage.default_profile,
+            "voices": usage.overrides,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(selection.encode()).hexdigest()[:10]
+    return f"mixed-{digest}"
 
 
 def validate_voice_for_profile(name: str, voice: VoiceSpec, profile: RenderProfile) -> None:
@@ -207,11 +262,6 @@ def validate_voice_for_profile(name: str, voice: VoiceSpec, profile: RenderProfi
         raise ValueError(
             f"voice {name!r} uses {voice.kind}, but {profile.provider}/{profile.model} supports: "
             f"{supported}"
-        )
-    if voice.kind != profile.voice_mode:
-        raise ValueError(
-            f"voice {name!r} uses {voice.kind}, but profile {profile.id} requires "
-            f"{profile.voice_mode}"
         )
     if voice.reference_audio is not None:
         suffix = voice.reference_audio.suffix.lower().lstrip(".")
@@ -227,7 +277,6 @@ def validate_voice_for_profile(name: str, voice: VoiceSpec, profile: RenderProfi
             )
         size = voice.reference_audio.stat().st_size
         if capability.max_reference_audio_bytes is not None:
-            # Base64 expands data by roughly 4/3. MiMo's documented limit applies post-encoding.
             encoded_size = ((size + 2) // 3) * 4
             if encoded_size > capability.max_reference_audio_bytes:
                 raise ValueError(f"voice {name!r} reference audio exceeds the encoded size limit")
@@ -268,44 +317,114 @@ def _streaming_mode(provider: str, model: str, stream: bool) -> StreamingMode:
 
 def _parse_output(data: dict[str, Any]) -> OutputConfig:
     _reject_extra(data, {"sample_rate", "channels", "sample_format", "final_format"}, "output")
-    sample_format = data.get("sample_format", "s16")
-    final_format = data.get("final_format", "wav")
+    defaults = OutputConfig()
+    sample_format = data.get("sample_format", defaults.sample_format)
+    final_format = data.get("final_format", defaults.final_format)
     if sample_format != "s16":
         raise ValueError("output.sample_format currently supports only s16")
     if final_format not in {"wav", "mp3", "opus", "m4a"}:
         raise ValueError("output.final_format must be wav, mp3, opus, or m4a")
     return OutputConfig(
-        sample_rate=_positive_int(data.get("sample_rate", 24000), "output.sample_rate"),
-        channels=_positive_int(data.get("channels", 1), "output.channels"),
+        sample_rate=_positive_int(
+            data.get("sample_rate", defaults.sample_rate), "output.sample_rate"
+        ),
+        channels=_positive_int(data.get("channels", defaults.channels), "output.channels"),
         sample_format=sample_format,
         final_format=final_format,
     )
 
 
 def _parse_assembly(data: dict[str, Any]) -> AssemblyConfig:
-    fields = {"dialogue_gap_ms", "narration_gap_ms", "scene_gap_ms", "chapter_gap_ms"}
+    fields = {
+        "chunk_gap_ms",
+        "dialogue_gap_ms",
+        "narration_gap_ms",
+        "scene_gap_ms",
+        "chapter_gap_ms",
+    }
     _reject_extra(data, fields, "assembly")
+    defaults = AssemblyConfig()
     values = {
-        name: _nonnegative_int(data.get(name, default), f"assembly.{name}")
-        for name, default in (
-            ("dialogue_gap_ms", 180),
-            ("narration_gap_ms", 260),
-            ("scene_gap_ms", 800),
-            ("chapter_gap_ms", 1500),
-        )
+        name: _nonnegative_int(data.get(name, getattr(defaults, name)), f"assembly.{name}")
+        for name in fields
     }
     return AssemblyConfig(**values)
 
 
+def _parse_execution(data: dict[str, Any]) -> ExecutionConfig:
+    fields = {"max_chars_per_request", "manifest_flush_interval_seconds"}
+    _reject_extra(data, fields, "execution")
+    defaults = ExecutionConfig()
+    return ExecutionConfig(
+        max_chars_per_request=_positive_int(
+            data.get("max_chars_per_request", defaults.max_chars_per_request),
+            "execution.max_chars_per_request",
+        ),
+        manifest_flush_interval_seconds=_nonnegative_number(
+            data.get(
+                "manifest_flush_interval_seconds",
+                defaults.manifest_flush_interval_seconds,
+            ),
+            "execution.manifest_flush_interval_seconds",
+        ),
+    )
+
+
 def _parse_review(data: dict[str, Any]) -> ReviewPolicy:
     _reject_extra(data, {"fail_on_review", "fail_on_unknown"}, "review")
-    values = {}
-    for name in ("fail_on_review", "fail_on_unknown"):
-        value = data.get(name, True)
-        if not isinstance(value, bool):
-            raise ValueError(f"review.{name} must be boolean")
-        values[name] = value
-    return ReviewPolicy(**values)
+    defaults = ReviewPolicy()
+    return ReviewPolicy(
+        fail_on_review=_boolean(
+            data.get("fail_on_review", defaults.fail_on_review), "review.fail_on_review"
+        ),
+        fail_on_unknown=_boolean(
+            data.get("fail_on_unknown", defaults.fail_on_unknown), "review.fail_on_unknown"
+        ),
+    )
+
+
+def _parse_timeline(data: dict[str, Any]) -> TimelineConfig:
+    _reject_extra(data, {"enabled", "include_silence_events", "subtitles"}, "timeline")
+    defaults = TimelineConfig()
+    subtitles = _mapping(data.get("subtitles", {}), "timeline.subtitles")
+    _reject_extra(
+        subtitles,
+        {"formats", "show_speaker", "include_narration"},
+        "timeline.subtitles",
+    )
+    raw_formats = subtitles.get("formats", list(defaults.subtitle_formats))
+    if not isinstance(raw_formats, list) or any(
+        not isinstance(value, str) for value in raw_formats
+    ):
+        raise ValueError("timeline.subtitles.formats must be a list of strings")
+    formats = tuple(raw_formats)
+    unsupported = set(formats) - {"srt", "vtt"}
+    if unsupported:
+        raise ValueError(
+            "timeline.subtitles.formats has unsupported values: " + ", ".join(sorted(unsupported))
+        )
+    return TimelineConfig(
+        enabled=_boolean(data.get("enabled", defaults.enabled), "timeline.enabled"),
+        include_silence_events=_boolean(
+            data.get("include_silence_events", defaults.include_silence_events),
+            "timeline.include_silence_events",
+        ),
+        subtitle_formats=formats,
+        show_speaker=_boolean(
+            subtitles.get("show_speaker", defaults.show_speaker),
+            "timeline.subtitles.show_speaker",
+        ),
+        include_narration=_boolean(
+            subtitles.get("include_narration", defaults.include_narration),
+            "timeline.subtitles.include_narration",
+        ),
+    )
+
+
+def _boolean(value: Any, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{label} must be boolean")
+    return value
 
 
 def _positive_int(value: Any, label: str) -> int:
@@ -323,4 +442,10 @@ def _nonnegative_int(value: Any, label: str) -> int:
 def _positive_number(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         raise ValueError(f"{label} must be a positive number")
+    return float(value)
+
+
+def _nonnegative_number(value: Any, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise ValueError(f"{label} must be a non-negative number")
     return float(value)

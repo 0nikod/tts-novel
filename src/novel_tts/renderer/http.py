@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import time
+from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -9,7 +10,22 @@ import httpx
 
 from .models import PreparedRequest
 
-RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+RETRYABLE_STATUS = {429, 502, 503, 504}
+
+
+@dataclass(frozen=True)
+class HttpResult:
+    body: bytes
+    request_id: str | None
+    attempts: int
+    elapsed_ms: int
+
+
+class TTSRequestError(ValueError):
+    def __init__(self, message: str, *, attempts: int, elapsed_ms: int) -> None:
+        super().__init__(message)
+        self.attempts = attempts
+        self.elapsed_ms = elapsed_ms
 
 
 def send_request(
@@ -17,34 +33,74 @@ def send_request(
     *,
     timeout: float,
     retries: int,
+    client: httpx.Client | None = None,
     transport: httpx.BaseTransport | None = None,
-) -> tuple[bytes, str | None]:
-    last_error: Exception | None = None
-    with httpx.Client(timeout=timeout, transport=transport) as client:
+) -> HttpResult:
+    if client is not None and transport is not None:
+        raise ValueError("send_request cannot receive both client and transport")
+    owned_client = client is None
+    current_client = client or httpx.Client(timeout=timeout, transport=transport)
+    started = time.monotonic()
+    attempts = 0
+    try:
         for attempt in range(retries + 1):
+            attempts = attempt + 1
             try:
-                response = client.post(
+                response = current_client.post(
                     request.url,
                     headers=request.headers,
                     json=request.json_body,
                     content=request.content,
+                    timeout=timeout,
                 )
-                if response.status_code in RETRYABLE_STATUS and attempt < retries:
-                    time.sleep(_retry_delay(response.headers.get("Retry-After"), attempt))
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as error:
+                if attempt < retries:
+                    time.sleep(_retry_delay(None, attempt))
                     continue
-                if response.is_error:
-                    detail = _safe_error_detail(response)
-                    raise ValueError(f"TTS API returned HTTP {response.status_code}: {detail}")
-                request_id = response.headers.get("x-request-id") or response.headers.get(
-                    "request-id"
+                raise TTSRequestError(
+                    f"TTS API connection failed after {attempts} attempt(s): {error}",
+                    attempts=attempts,
+                    elapsed_ms=_elapsed_ms(started),
+                ) from error
+            except (
+                httpx.ReadError,
+                httpx.ReadTimeout,
+                httpx.WriteError,
+                httpx.WriteTimeout,
+                httpx.RemoteProtocolError,
+            ) as error:
+                raise TTSRequestError(
+                    "TTS API request outcome is uncertain; it was not retried to avoid a "
+                    f"duplicate paid request: {error}",
+                    attempts=attempts,
+                    elapsed_ms=_elapsed_ms(started),
+                ) from error
+
+            if response.status_code in RETRYABLE_STATUS and attempt < retries:
+                time.sleep(_retry_delay(response.headers.get("Retry-After"), attempt))
+                continue
+            if response.is_error:
+                detail = _safe_error_detail(response)
+                raise TTSRequestError(
+                    f"TTS API returned HTTP {response.status_code}: {detail}",
+                    attempts=attempts,
+                    elapsed_ms=_elapsed_ms(started),
                 )
-                return response.content, request_id
-            except (httpx.TimeoutException, httpx.NetworkError) as error:
-                last_error = error
-                if attempt >= retries:
-                    break
-                time.sleep(_retry_delay(None, attempt))
-    raise ValueError(f"TTS API request failed after {retries + 1} attempt(s): {last_error}")
+            request_id = response.headers.get("x-request-id") or response.headers.get("request-id")
+            return HttpResult(
+                body=response.content,
+                request_id=request_id,
+                attempts=attempts,
+                elapsed_ms=_elapsed_ms(started),
+            )
+    finally:
+        if owned_client:
+            current_client.close()
+    raise AssertionError("unreachable")
+
+
+def _elapsed_ms(started: float) -> int:
+    return round((time.monotonic() - started) * 1000)
 
 
 def _retry_delay(retry_after: str | None, attempt: int) -> float:

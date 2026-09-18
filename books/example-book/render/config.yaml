@@ -1,35 +1,7 @@
-default_profile: fish-s2-pro
-
 profiles:
-  fish-s2-pro:
-    provider: fish_audio
-    model: s2-pro
-    voice_mode: saved_reference
-    voice_file: ../voices.yaml
-    api_key_env: FISH_AUDIO_API_KEY
-    request:
-      format: wav
-      sample_rate: 24000
-      latency: normal
-      chunk_length: 300
-      normalize: true
-      temperature: 0.7
-      top_p: 0.7
-      prosody:
-        speed: 1.0
-        volume: 0
-        normalize_loudness: true
-    concurrency: 2
-    timeout_seconds: 120
-    retries: 4
-    style_policy:
-      unsupported: error
-
   mimo-preset:
     provider: mimo
     model: mimo-v2.5-tts
-    voice_mode: preset
-    voice_file: voices/mimo-preset.yaml
     api_key_env: MIMO_API_KEY
     request:
       format: wav
@@ -37,21 +9,6 @@ profiles:
     concurrency: 2
     timeout_seconds: 120
     retries: 4
-    style_policy:
-      unsupported: error
-
-  mimo-design:
-    provider: mimo
-    model: mimo-v2.5-tts-voicedesign
-    voice_mode: text_design
-    voice_file: voices/mimo-design.yaml
-    api_key_env: MIMO_API_KEY
-    request:
-      format: wav
-      stream: false
-    concurrency: 1
-    timeout_seconds: 180
-    retries: 3
     style_policy:
       unsupported: error
 
@@ -62,11 +19,26 @@ output:
   final_format: mp3
 
 assembly:
+  chunk_gap_ms: 0
   dialogue_gap_ms: 180
   narration_gap_ms: 260
   scene_gap_ms: 800
   chapter_gap_ms: 1500
 
+execution:
+  max_chars_per_request: 200
+  manifest_flush_interval_seconds: 1.0
+
 review:
   fail_on_review: true
   fail_on_unknown: true
+
+timeline:
+  enabled: true
+  include_silence_events: true
+  subtitles:
+    formats:
+      - srt
+      - vtt
+    show_speaker: true
+    include_narration: true

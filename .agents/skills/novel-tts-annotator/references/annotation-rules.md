@@ -21,6 +21,22 @@ When a section is headed or clearly identified as `后记`, `作者后记`, `译
 
 Do not add an author, translator, editor, relative, or other person to `persons.yaml` solely because they appear in narrator-only paratext. If the same person independently appears as a character in the story, their story occurrences still follow the normal speaker rules.
 
+## Character prominence and extras
+
+Use the following book-level roles:
+
+- `main`: drives the central narrative.
+- `secondary`: recurring or consequential enough to preserve a distinct identity and voice.
+- `minor`: an infrequent, incidental extra character that does not need an individual TTS voice.
+
+Importance and recurrence matter more than a raw number of lines. Use available later chapters and existing annotations to avoid treating a temporarily absent important character as minor. In a borderline case, preserve a distinct character as `secondary`.
+
+All minor characters intentionally collapse to the single canonical person `EXTRA` (`role: minor`) in `persons.yaml` and annotations. Distinct minor people's names are not aliases of `EXTRA`; do not add them to its alias list. A clear attribution to an incidental person is sufficient to use `EXTRA` and does not require review. If context later elevates that person, add the proper canonical person and retroactively replace their `EXTRA` annotations.
+
+Use `UNKNOWN` with review when the unresolved speaker could be a main/secondary character rather than an extra. If every plausible speaker is incidental and distinguishing them has no effect on casting or continuity, use `EXTRA` without inventing an identity.
+
+The `EXTRA` voice binding must be an exact copy of `NARRATOR` in every existing root or render voice map. This is a casting rule, not permission to place voice metadata in annotations or `persons.yaml`.
+
 ## Text type
 
 - `narration`: narrator exposition, action, description, and speech-attribution clauses.

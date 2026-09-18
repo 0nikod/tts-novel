@@ -32,7 +32,7 @@ novel-tts validate books/my-book
 novel-tts review books/my-book
 ```
 
-仓库内的 `books/example-book/` 提供了一份完整的双章节《水浒传》节选示例，包含多场景划分、人物别名、内心独白、显式说话风格以及待人工审核的说话人：
+仓库内的 `books/example-book/` 提供了一份完整的双章节《孔乙己》示例，包含场景划分、人物分级、显式说话风格和 MiMo preset 渲染配置：
 
 ```bash
 novel-tts validate books/example-book
@@ -48,7 +48,7 @@ books/my-book/
 ├── annotations/     # 每章 segment 标记
 ├── persons.yaml     # 人物标准名称、别名和角色
 ├── scenes.yaml      # 全书线性场景
-└── voices.yaml      # name 到 reference_id 的映射
+└── voices.yaml      # 可选的旧版 reference_id 映射
 ```
 
 `persons.yaml` 使用列表保存人物标准名称、别名和角色：
@@ -87,15 +87,43 @@ Render 配置与标记数据隔离，位于每本书的 `render/` 目录：
 render/
 ├── config.yaml              # 模型 profile、输出和审核策略
 ├── styles.yaml              # 通用 style 到模型控制指令的覆盖映射
-├── voices/                  # 模型专属音色配置
+├── voices.yaml              # 可用的多模型音色来源目录
+├── voice_used.yaml          # 默认 profile 与逐人物声音覆盖
 ├── cache/                   # 生成缓存，不提交
 ├── manifests/               # 可复现清单，不提交
 └── output/                  # segment、scene、chapter 和全书音频，不提交
 ```
 
-Renderer 不写入 `processed/`、`annotations/`、`persons.yaml`、`scenes.yaml` 或根目录的 `voices.yaml`。Fish profile 可以继续只读使用原有 `voices.yaml`；MiMo 的预置、文字设计和克隆音色分别使用 render 专属文件。
+Renderer 不写入 `processed/`、`annotations/`、`persons.yaml`、`scenes.yaml` 或根目录的 `voices.yaml`。`render/voices.yaml` 只保存可用来源，每个来源明确引用一个 profile：
+
+```yaml
+voices:
+  林冲:
+    fish-main:
+      profile: fish-s2-pro
+      kind: saved_reference
+      reference_id: fish-lin-chong
+    mimo-preset:
+      profile: mimo-preset
+      kind: preset
+      voice: 白桦
+```
+
+实际选择单独放在 `render/voice_used.yaml`：
+
+```yaml
+default_profile: fish-s2-pro
+voices:
+  林冲: mimo-preset
+```
+
+没有人物覆盖时，renderer 会选择该人物在 `default_profile` 下唯一的来源；人物覆盖值是其 `voices.yaml` 中的来源名称。同一个人物可以在同一 profile 下保存多个来源，但此时必须通过人物覆盖消除歧义。命令行 `--profile` 会强制所有人物使用指定 profile，并忽略人物覆盖。存在人物覆盖时，输出目录会带有选择配置摘要，避免不同 mixed 配置互相覆盖。
 
 模型能力按具体 model 校验，而不是只按供应商判断。当前注册了 Fish Audio `s2-pro`/`s2.1-pro` 和 MiMo 的 preset、voicedesign、voiceclone 三类模型。声音模式或流式模式不兼容时会在付费请求前失败，不会静默降级。
+
+完成拼接后会按实际 PCM frame 生成 `timeline.json`、SRT 和 WebVTT。全书、章节和场景 timeline 分别使用对应音频的相对时间；章节和场景文件还会记录全书绝对时间。插入的 segment、scene 和 chapter 静音也包含在时间轴中。过长 segment 会按 `execution.max_chars_per_request` 在句子边界切成多个请求；cache key 包含标准化输出参数。
+
+每次运行会在输出目录的 `snapshots/` 中保存 config、声音选择、style、人物、场景、annotations、processed 和 source 输入，并记录 SHA-256。默认只有所有计划任务成功后才拼接成品；`--allow-partial` 才允许显式生成不完整音频。
 
 ```bash
 # 查看已知模型能力
@@ -107,16 +135,16 @@ novel-tts render validate-config books/my-book --profile fish-s2-pro
 # 显示任务数、字符数和缓存命中；不会调用 API
 novel-tts render plan books/my-book --profile mimo-preset
 
-# 执行与断点缓存
-FISH_AUDIO_API_KEY=... novel-tts render run books/my-book --profile fish-s2-pro
-MIMO_API_KEY=... novel-tts render run books/my-book --profile mimo-preset
+# 执行与断点缓存；安全解析 .env，不覆盖已存在的环境变量
+novel-tts render run books/my-book --profile fish-s2-pro --env-file .env
+novel-tts render run books/my-book --profile mimo-preset --env-file .env
 
 # 仅用现有 segment WAV 重新拼接
 novel-tts render assemble books/my-book --profile fish-s2-pro
 novel-tts render status books/my-book --profile fish-s2-pro
 ```
 
-渲染依赖系统中的 `ffmpeg`。默认遇到 `review: true` 或 `UNKNOWN` 时阻止 API 请求；`--allow-review` 只放行已配置说话人的审核项，不会自动为 `UNKNOWN` 选择声音。
+渲染依赖系统中的 `ffmpeg`。默认遇到 `review: true` 或 `UNKNOWN` 时阻止 API 请求；`--allow-review` 只放行已配置说话人的审核项，不会自动为 `UNKNOWN` 选择声音。HTTP 连接失败和明确可重试状态会按配置重试；读取超时等结果不确定的错误不会自动重试，以免重复产生付费请求。manifest 会记录 request ID、尝试次数和耗时。
 
 ## 开发检查
 

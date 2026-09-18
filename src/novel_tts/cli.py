@@ -4,13 +4,19 @@ import json
 from pathlib import Path
 
 import typer
+from dotenv import load_dotenv
 
 from .annotations import load_annotation
 from .book import Book
 from .preprocessing import preprocess_file, read_processed
+from .renderer.audio import validate_canonical_wave
 from .renderer.capabilities import all_capabilities
-from .renderer.config import load_render_config
-from .renderer.models import RenderIssue
+from .renderer.config import (
+    load_render_config,
+    load_voice_catalog,
+    load_voice_usage,
+    render_target,
+)
 from .renderer.planner import build_render_plan, validate_render_configuration
 from .renderer.service import assemble_render, run_render
 from .validation import validate_book
@@ -208,9 +214,7 @@ def render_validate_config(
     profile: str | None = typer.Option(None, "--profile", "-p"),
 ) -> None:
     """Validate renderer configuration, voices, styles, and model capabilities."""
-    issues, config = validate_render_configuration(get_book(book_path))
-    if profile is not None and config is not None and profile not in config.profiles:
-        issues.append(RenderIssue("ERROR", f"render profile {profile!r} does not exist"))
+    issues, config = validate_render_configuration(get_book(book_path), profile_id=profile)
     _print_render_issues(issues)
     if any(str(issue).startswith("ERROR") for issue in issues):
         raise typer.Exit(1)
@@ -237,14 +241,23 @@ def render_plan_command(
     _print_render_issues(plan.issues)
     characters = sum(len(job.source_text) for job in plan.jobs)
     profiles = sorted({job.profile.id for job in plan.jobs})
-    cache_hits = (
-        sum((config.root / "cache" / f"{job.cache_key}.wav").exists() for job in plan.jobs)
-        if config is not None
-        else 0
-    )
+    cache_hits = 0
+    cache_migrations = 0
+    if config is not None:
+        for job in plan.jobs:
+            if (config.root / "cache" / f"{job.cache_key}.wav").exists():
+                cache_hits += 1
+            elif job.legacy_cache_key is not None:
+                legacy_path = config.root / "cache" / f"{job.legacy_cache_key}.wav"
+                try:
+                    validate_canonical_wave(legacy_path, config.output)
+                except (FileNotFoundError, OSError, ValueError):
+                    continue
+                cache_migrations += 1
+    cache_misses = len(plan.jobs) - cache_hits - cache_migrations
     typer.echo(
         f"Plan: {len(plan.jobs)} job(s), {characters} character(s), "
-        f"cache={cache_hits} hit/{len(plan.jobs) - cache_hits} miss, "
+        f"cache={cache_hits} hit/{cache_migrations} migratable/{cache_misses} miss, "
         f"profiles={','.join(profiles) or '-'}"
     )
     if plan.errors:
@@ -259,8 +272,15 @@ def render_run_command(
     scene: str | None = typer.Option(None, "--scene"),
     allow_review: bool = typer.Option(False, "--allow-review"),
     force: bool = typer.Option(False, "--force"),
+    allow_partial: bool = typer.Option(False, "--allow-partial"),
+    env_file: Path | None = typer.Option(None, "--env-file"),
 ) -> None:
-    """Synthesize segments, use the cache, and assemble available audio."""
+    """Synthesize segments, use the cache, and assemble complete audio."""
+    if env_file is not None:
+        if not env_file.is_file():
+            typer.echo(f"ERROR: env file does not exist: {env_file}", err=True)
+            raise typer.Exit(1)
+        load_dotenv(env_file, override=False)
     plan, manifest = run_render(
         get_book(book_path),
         profile_id=profile,
@@ -268,6 +288,7 @@ def render_run_command(
         scene_id=scene,
         allow_review=allow_review,
         force=force,
+        allow_partial=allow_partial,
     )
     _print_render_issues(plan.issues)
     if plan.errors:
@@ -286,6 +307,7 @@ def render_assemble_command(
     chapter: str | None = typer.Option(None, "--chapter", "-c"),
     scene: str | None = typer.Option(None, "--scene"),
     allow_review: bool = typer.Option(False, "--allow-review"),
+    allow_partial: bool = typer.Option(False, "--allow-partial"),
 ) -> None:
     """Reassemble existing segment WAV files without making API calls."""
     plan, count = assemble_render(
@@ -294,6 +316,7 @@ def render_assemble_command(
         chapter=chapter,
         scene_id=scene,
         allow_review=allow_review,
+        allow_partial=allow_partial,
     )
     _print_render_issues(plan.issues)
     if plan.errors:
@@ -310,16 +333,30 @@ def render_status_command(
     book = get_book(book_path)
     try:
         config = load_render_config(book.root)
+        catalog = load_voice_catalog(config.root, config.profiles)
+        usage = load_voice_usage(config.root, catalog, config.profiles)
     except ValueError as error:
         typer.echo(f"ERROR: {error}", err=True)
         raise typer.Exit(1) from error
-    target = profile or (config.default_profile if not config.person_routes else "routed")
+    if profile is not None and profile not in config.profiles:
+        typer.echo(f"ERROR: render profile {profile!r} does not exist", err=True)
+        raise typer.Exit(1)
+    target = render_target(profile, usage)
     path = config.root / "manifests" / f"{target}.json"
     if not path.exists():
         typer.echo(f"No manifest found for {target}.")
         return
     data = json.loads(path.read_text(encoding="utf-8"))
-    typer.echo(f"{target}: {data.get('completed', 0)} completed, {data.get('failed', 0)} failed")
+    if "assembled" not in data:
+        assembly = "assembly status unknown (legacy manifest)"
+    else:
+        assembly = "assembled" if data["assembled"] else "not assembled"
+    if data.get("partial"):
+        assembly = "partially assembled"
+    typer.echo(
+        f"{target}: {data.get('completed', 0)} completed, "
+        f"{data.get('failed', 0)} failed, {assembly}"
+    )
 
 
 def _print_render_issues(issues: list[object]) -> None:
