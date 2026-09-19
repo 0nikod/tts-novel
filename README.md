@@ -69,6 +69,8 @@ persons:
 
 `NARRATOR` 和 `UNKNOWN` 是保留名称，不写入 `persons.yaml`。
 
+`scenes.yaml` 是行号到场景的唯一来源。每个场景在 `line` 中声明一个或多个章节行范围；标注文件只记录 `chapter`、segment 的 `line`、人物、类型、风格和审核状态，不再写入 `scene_id`。程序根据章节和完整行范围从 `scenes.yaml` 推导场景；跨越场景边界的 segment 会被校验拒绝。annotation YAML 的结构规范见 [`docs/annotation.schema.yaml`](docs/annotation.schema.yaml)；词汇仍由 `src/novel_tts/annotation_schema.yaml` 提供。
+
 `source/*.txt` 文件名必须是纯数字。排序按其数值进行；`001.txt` 与 `1.txt` 会被视为重复章节。
 
 预处理将每个非空物理行视为一个原始段落，拆分常见中文引号、直角引号及英文双引号。原始字符、引号和标点保持不变；输出采用 `行号-正文` 格式。
@@ -80,10 +82,13 @@ novel-tts init BOOK
 novel-tts status BOOK
 novel-tts preprocess BOOK [--chapter 003]
 novel-tts validate BOOK [--chapter 003] [--format text|json]
+novel-tts fill-annotations BOOK [--chapter 003]
 novel-tts review BOOK
 ```
 
 校验器检查行号覆盖、segment 重叠、人物引用、scene 范围及顺序、style 字段和 review 标记。命令在存在结构错误时返回非零状态。
+
+Annotator 可以阅读全文，但只把明确的 dialogue、thought 或需要保留审核信息的 narration 写入 annotation；普通未覆盖行由 `novel-tts fill-annotations` 统一补成 `NARRATOR`/`narration`。该命令会按 `scenes.yaml` 的 `line` 范围切分生成 segment，并拒绝重叠、越界和跨场景 segment。annotation 中的 `style` 可以省略；省略与 `style: null` 等价。若写入 style mapping，至少要有一个明确的非 null 值，不能使用空 mapping 或嵌套 null。`scene_id` 不写入 annotation，由程序从章节和行号推导。
 
 ## Render 层
 

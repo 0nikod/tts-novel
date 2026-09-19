@@ -34,39 +34,51 @@ scenes:
 
 Quote scene ranges so YAML always treats them as strings.
 
-## annotations/001.yaml
+`docs/annotation.schema.yaml` defines the annotation document shape. `src/novel_tts/annotation_schema.yaml` defines canonical vocabulary. `scenes.yaml` is the source of truth for mapping an annotation chapter and complete line range to a scene. Annotation segments do not contain `scene_id`.
+
+## annotations/001.yaml — sparse input
+
+The annotator may write only explicit dialogue/thought segments. `style` is optional: omit it when there is no explicit style evidence. The completion command later adds ordinary narration.
 
 ```yaml
+# chapter: numeric source chapter; this is not a scene identifier.
+chapter: 1
+segments:
+  # Only a deliberately modeled spoken line is written here.
+  - line: 3
+    name: 小明
+    type: dialogue
+    # style is omitted because no explicit style is present.
+```
+
+Run `novel-tts fill-annotations BOOK --chapter 001` to fill the uncovered lines.
+
+## annotations/001.yaml — completed output
+
+```yaml
+# `scene_id` is intentionally absent; scenes.yaml owns line-to-scene mapping.
 chapter: 1
 segments:
   - line: 1-2
     name: NARRATOR
     type: narration
-    style: null
-    scene_id: S0001
+    # style may be omitted when it is null.
   - line: 3
     name: 小明
     type: dialogue
     style:
       emotion: nervous
-      delivery: null
       volume: low
-      pace: null
-      vocal_action_before: null
-      vocal_action_after: null
-    scene_id: S0001
   - line: 4
     name: EXTRA
     type: dialogue
     style: null
-    scene_id: S0001
   - line: 5
     name: UNKNOWN
     type: dialogue
     style: null
-    scene_id: S0001
     review: true
     review_reason: ambiguous_speaker
 ```
 
-`line` is an integer for one line and `start-end` for a consecutive range. It is never a list in an annotation segment.
+`line` is an integer and `start-end` is a consecutive range. It is never a list in an annotation segment; range ordering is checked by the program. `name` is a canonical person or reserved system name; `type` is one of `narration`, `dialogue`, or `thought`; `review` is optional and defaults to false; `review_reason` is required only when `review: true`. `style` may be omitted or be `null`; when it is a mapping, include only canonical fields with explicit non-null values. `scene_id` must not be written.

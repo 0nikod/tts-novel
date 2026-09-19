@@ -1,7 +1,9 @@
+from pathlib import Path
 from types import MappingProxyType
 from typing import get_args
 
 import pytest
+import yaml
 
 from novel_tts.annotation_schema import (
     NARRATOR_NAME,
@@ -27,6 +29,27 @@ from novel_tts.renderer.style import (
     load_style_mappings,
     validate_provider_default_mappings,
 )
+
+ANNOTATION_SCHEMA_PATH = Path(__file__).parents[1] / "docs" / "annotation.schema.yaml"
+
+
+def test_structural_annotation_schema_is_yaml_and_keeps_style_optional() -> None:
+    schema = yaml.safe_load(ANNOTATION_SCHEMA_PATH.read_text(encoding="utf-8"))
+
+    assert schema["$schema"].startswith("https://json-schema.org/")
+    assert schema["$id"].startswith("https://")
+    assert schema["type"] == "object"
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["chapter", "segments"]
+    segment = schema["$defs"]["segment"]
+    assert set(segment["required"]) == {"line", "name", "type"}
+    assert "style" not in segment["required"]
+    assert "scene_id" not in segment["properties"]
+    style = schema["$defs"]["style"]
+    assert style["minProperties"] == 1
+    assert "style-value-or-null" not in schema["$defs"]
+    assert style["additionalProperties"] is False
+    assert all(field.get("type") == "string" for field in style["properties"].values())
 
 
 def test_annotation_schema_has_exact_canonical_vocabulary() -> None:

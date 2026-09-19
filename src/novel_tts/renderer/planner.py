@@ -10,6 +10,7 @@ from ..annotations import load_annotation
 from ..book import Book
 from ..persons import load_persons
 from ..preprocessing import read_processed
+from ..scenes import find_scene, load_scenes
 from ..validation import validate_book
 from .config import (
     load_render_config,
@@ -69,6 +70,7 @@ def build_render_plan(
     if plan.errors:
         return plan, None
     try:
+        scenes = load_scenes(book.scenes_path)
         config = load_render_config(book.root)
         style_mappings = load_style_mappings(config.root)
     except ValueError as error:
@@ -96,9 +98,19 @@ def build_render_plan(
         annotation = load_annotation(annotation_path)
         text_by_line = {line.number: line.text for line in read_processed(processed_path)}
         for segment in annotation.segments:
-            if scene_id is not None and segment.scene_id != scene_id:
-                continue
             base_job_id = f"{chapter_stem}-{segment.line.start:06d}-{segment.line.end:06d}"
+            scene = find_scene(scenes, chapter_stem, segment.line)
+            if scene is None:
+                plan.issues.append(
+                    RenderIssue(
+                        "ERROR",
+                        f"segment {base_job_id} is outside or crosses scene ranges",
+                        base_job_id,
+                    )
+                )
+                continue
+            if scene_id is not None and scene.id != scene_id:
+                continue
             try:
                 selected_source = resolve_voice_source(
                     segment.name, catalog, usage, forced_profile=profile_id
@@ -160,7 +172,7 @@ def build_render_plan(
                     chapter=chapter_stem,
                     line_start=segment.line.start,
                     line_end=segment.line.end,
-                    scene_id=segment.scene_id,
+                    scene_id=scene.id,
                     name=segment.name,
                     text_type=segment.type,
                     source_text=chunk_text,

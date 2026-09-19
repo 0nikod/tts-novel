@@ -28,12 +28,10 @@ def _make_render_book(tmp_path: Path) -> Book:
         "    name: NARRATOR\n"
         "    type: narration\n"
         "    style: null\n"
-        "    scene_id: S0001\n"
         "  - line: 2\n"
         "    name: EXTRA\n"
         "    type: dialogue\n"
-        "    style: null\n"
-        "    scene_id: S0001\n",
+        "    style: null\n",
         encoding="utf-8",
     )
     (book_root / "render" / "config.yaml").write_text(
@@ -87,6 +85,7 @@ def test_scene_can_be_planned_without_api_access(tmp_path: Path) -> None:
     assert config is not None
     assert plan.errors == []
     assert len(plan.jobs) == 2
+    assert {job.scene_id for job in plan.jobs} == {"S0001"}
     assert {job.profile.model for job in plan.jobs} == {"s2-pro"}
 
 
@@ -96,6 +95,7 @@ def test_full_book_can_be_planned_with_extra_fallback(tmp_path: Path) -> None:
     assert plan.errors == []
     assert len(plan.jobs) == 2
     assert "EXTRA" in {job.name for job in plan.jobs}
+    assert {job.scene_id for job in plan.jobs} == {"S0001"}
 
 
 def test_same_scene_can_use_mimo_preset_profile(tmp_path: Path) -> None:
@@ -121,7 +121,7 @@ def test_structural_annotation_errors_stop_planning_without_exception(tmp_path: 
 
     assert config is None
     assert plan.jobs == []
-    assert any("style.emotion must be a string or null" in issue.message for issue in plan.errors)
+    assert any("style.emotion must be a string" in issue.message for issue in plan.errors)
 
 
 def test_text_split_is_bounded_and_lossless() -> None:

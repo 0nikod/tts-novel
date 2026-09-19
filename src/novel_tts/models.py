@@ -93,8 +93,7 @@ class Segment:
     line: LineRange
     name: str
     type: TextType
-    style: dict[str, str | None] | None
-    scene_id: str
+    style: dict[str, str] | None
     review: bool = False
     review_reason: ReviewReason | None = None
 
@@ -108,7 +107,6 @@ class Segment:
             self.name,
             self.type,
             style,
-            self.scene_id,
             self.review,
             self.review_reason,
         )

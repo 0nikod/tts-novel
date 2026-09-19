@@ -8,7 +8,7 @@ compatibility: Requires the novel-tts project CLI and its standard book director
 
 Annotate one book in numeric chapter order. The source text is immutable. Never create `speaker_id` values. Annotation output is provider-neutral: do not read or modify render configuration, voice catalogs, voice selections, or provider-specific request data.
 
-`src/novel_tts/annotation_schema.yaml` is the source of truth for all annotation type, person role, system name, review reason, style field, and style value vocabularies. Consult its exported constants rather than maintaining or inventing values in this skill. In particular, every non-null style value must occur under its field in `STYLE_VALUES`; never create a free-form short English value.
+`src/novel_tts/annotation_schema.yaml` is the source of truth for annotation vocabularies. `docs/annotation.schema.yaml` is the structural JSON Schema written in YAML for `annotations/*.yaml`. Consult the exported constants rather than maintaining or inventing values in this skill. In particular, every non-null style value must occur under its field in `STYLE_VALUES`; never create a free-form short English value.
 
 Read [annotation rules](references/annotation-rules.md) before making semantic decisions. Read [YAML examples](references/yaml-examples.md) when creating or repairing files.
 
@@ -42,16 +42,24 @@ novel-tts preprocess <book> --chapter <C>
 
 Build a working list of canonical person names and aliases from `persons.yaml`. Inspect existing scene IDs and identify the last scene before this chapter. If an existing annotation is present, preserve confirmed human choices unless they violate the schema or the user explicitly asks for re-annotation.
 
-### 2. Classify every processed line
+### 2. Read the full chapter and write explicit segments
 
-For every line, determine:
+Read the complete processed chapter before making decisions. For each explicit dialogue, represented thought, or narration region that needs a deliberate annotation/review, determine:
 
 - canonical `name`
 - `type` from `TEXT_TYPES`
-- explicit `style`, otherwise `null`
-- linear `scene_id`
+- explicit `style`, when present
+- a line range whose scene is defined by `scenes.yaml`
 
-Every processed line must be covered exactly once. A segment can contain only consecutive lines.
+Sparse annotation is supported: ordinary narration does not need to be written by the agent. Do not write a segment merely to say that an uncovered line is narration. Keep explicitly modeled dialogue/thought segments, and include an explicit narration segment only when it carries a deliberate review decision or other information that must be preserved. Every emitted segment must contain only consecutive lines and must fit wholly within one scene. The segment scene is derived from its chapter and complete line range using `scenes.yaml`; do not add a `scene_id` field to annotation YAML.
+
+After writing sparse annotations, run:
+
+```bash
+novel-tts fill-annotations <book> --chapter <C>
+```
+
+The command fills every uncovered processed line as `NARRATOR` with `type: narration`, splits generated ranges at scene boundaries, preserves explicit segments, and is idempotent. It rejects overlaps, out-of-range segments, malformed annotations, and segments that cross scene ranges. An empty `segments: []` file is valid when the chapter contains no explicit dialogue/thought annotation.
 
 Use the appropriate reserved name from `SYSTEM_NAMES` for narration or a genuinely unresolved person. Use canonical names in annotations, never aliases.
 
@@ -79,7 +87,7 @@ Do not invent biography, role, alias, or identity from weak evidence. Use the un
 
 A scene is a linear narrative event, not merely a place or time label. Continue the preceding scene when the event, conversation, and principal relationships remain continuous. Create a new scene for a clear narrative jump or independent event.
 
-Allocate new IDs monotonically (`S0001`, `S0002`, ...). Update each scene range and concise summary in `scenes.yaml`. A scene may cross a chapter boundary and then uses a list of chapter ranges. Scene ranges must not overlap or move backwards.
+Allocate new IDs monotonically (`S0001`, `S0002`, ...). Update each scene range and concise summary in `scenes.yaml`. A scene may cross a chapter boundary and then uses a list of chapter ranges. `scenes.yaml` is the authoritative line-to-scene mapping used to resolve annotation segments. Scene ranges must not overlap or move backwards.
 
 ### 5. Record uncertainty
 
@@ -87,13 +95,14 @@ Use `review: true` plus exactly one suitable value from `REVIEW_REASONS`. Prefer
 
 ### 6. Write annotations
 
-Write `<book>/annotations/<C>.yaml`. Merge adjacent lines only when all of these match exactly:
+Write `<book>/annotations/<C>.yaml`. In sparse mode, write only explicit dialogue/thought segments and any deliberately reviewed narration segments; the completion command supplies ordinary narration. Merge adjacent lines only when all of these match exactly:
 
 - `name`
 - `type`
-- `style`
-- `scene_id`
+- `style` when an explicit style mapping is present
 - review state and reason
+
+`style` is optional in YAML. Omit it when the value is `null`; omitted `style` and `style: null` have the same meaning. When a style mapping is present, include at least one explicit non-null canonical field/value from `STYLE_FIELDS` and `STYLE_VALUES`; do not write an empty mapping or nested null values.
 
 Never copy正文 into YAML. Never alter `source/*.txt` or `processed/*.txt` while annotating.
 
@@ -114,6 +123,6 @@ Repair structural errors in `persons.yaml`, `scenes.yaml`, or the chapter annota
 - Do not use location or time alone as a reason to split a scene.
 - Do not create non-contiguous segment line lists.
 - Do not assign character names inside narrator-only paratext sections.
-- Do not place person details, scene summaries,正文, voices, or speaker IDs in annotations.
+- Do not place person details, scene summaries, scene IDs,正文, voices, or speaker IDs in annotations; `scenes.yaml` owns the line-to-scene mapping.
 - Do not place location/time metadata in `scenes.yaml`.
 - Do not read or modify renderer files and do not call a TTS service. Renderer setup belongs to the `novel-tts-renderer` skill.

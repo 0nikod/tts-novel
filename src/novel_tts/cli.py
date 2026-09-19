@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
 
-from .annotations import load_annotation
+from .annotations import complete_annotation, load_annotation, save_annotation
 from .book import Book
+from .models import Annotation
 from .preprocessing import preprocess_file, read_processed
 from .renderer.audio import validate_canonical_wave
 from .renderer.capabilities import all_capabilities
@@ -19,6 +22,7 @@ from .renderer.config import (
 )
 from .renderer.planner import build_render_plan, validate_render_configuration
 from .renderer.service import assemble_render, run_render
+from .scenes import find_scene, load_scenes
 from .validation import validate_book
 
 app = typer.Typer(
@@ -167,7 +171,8 @@ def review(
     total = 0
     try:
         chapters = book.source_chapters()
-    except ValueError as error:
+        scenes = load_scenes(book.scenes_path)
+    except (ValueError, OSError) as error:
         typer.echo(f"ERROR: {error}", err=True)
         raise typer.Exit(1) from error
     for source in chapters:
@@ -182,17 +187,119 @@ def review(
             typer.echo(f"ERROR {annotation_path}: {error}", err=True)
             continue
         for segment in annotation.segments:
+            scene = find_scene(scenes, source.stem, segment.line)
+            scene_label = scene.id if scene is not None else "<unmapped>"
             if not segment.review:
                 continue
             total += 1
             typer.echo(
                 f"[{source.stem}:{segment.line.format()}] "
                 f"{segment.review_reason or 'unspecified'} | "
-                f"{segment.name}/{segment.type} | {segment.scene_id}"
+                f"{segment.name}/{segment.type} | {scene_label}"
             )
             for number in range(segment.line.start, segment.line.end + 1):
                 typer.echo(f"  {number}-{text_by_line.get(number, '<missing>')}")
     typer.echo(f"Total review items: {total}")
+
+
+@app.command("fill-annotations")
+def fill_annotations(
+    book_path: Path = typer.Argument(..., exists=True, file_okay=False),
+    chapter: str | None = typer.Option(None, "--chapter", "-c", help="Numeric chapter"),
+) -> None:
+    """Fill uncovered processed lines with NARRATOR narration segments."""
+    if chapter is not None and not chapter.isdigit():
+        typer.echo("ERROR: chapter must be numeric", err=True)
+        raise typer.Exit(2)
+
+    book = get_book(book_path)
+    try:
+        chapters = book.source_chapters()
+        scenes = load_scenes(book.scenes_path)
+    except (ValueError, OSError) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        raise typer.Exit(1) from error
+
+    selected = [
+        source for source in chapters if chapter is None or int(source.stem) == int(chapter)
+    ]
+    if not selected:
+        typer.echo("ERROR: no matching source chapters", err=True)
+        raise typer.Exit(1)
+
+    inputs: list[tuple[Path, Annotation, int]] = []
+    input_errors: list[str] = []
+    for source in selected:
+        annotation_path = book.annotations_dir / f"{source.stem}.yaml"
+        processed_path = book.processed_dir / source.name
+        if not annotation_path.exists():
+            input_errors.append(f"{annotation_path}: annotation is missing")
+            continue
+        if not processed_path.exists():
+            input_errors.append(f"{processed_path}: processed chapter is missing")
+            continue
+        try:
+            annotation = load_annotation(annotation_path)
+            line_count = len(read_processed(processed_path))
+        except (OSError, ValueError) as error:
+            input_errors.append(f"{annotation_path}: {error}")
+            continue
+        inputs.append((annotation_path, annotation, line_count))
+
+    if input_errors:
+        for message in input_errors:
+            typer.echo(f"ERROR {message}", err=True)
+        raise typer.Exit(1)
+
+    issues = validate_book(book, chapter, require_coverage=False)
+    errors = [issue for issue in issues if issue.severity == "ERROR"]
+    for issue in issues:
+        if issue.severity == "WARNING":
+            typer.echo(str(issue), err=True)
+    if errors:
+        for issue in errors:
+            typer.echo(str(issue), err=True)
+        raise typer.Exit(1)
+
+    completed: list[tuple[Path, Annotation]] = []
+    added_segments = 0
+    completion_errors: list[str] = []
+    for annotation_path, annotation, line_count in inputs:
+        try:
+            result = complete_annotation(annotation, line_count, scenes)
+        except ValueError as error:
+            completion_errors.append(f"{annotation_path}: {error}")
+            continue
+        completed.append((annotation_path, result))
+        added_segments += len(result.segments) - len(annotation.segments)
+
+    if completion_errors:
+        for message in completion_errors:
+            typer.echo(f"ERROR {message}", err=True)
+        raise typer.Exit(1)
+
+    temporary_paths: list[tuple[Path, Path]] = []
+    try:
+        for destination, annotation in completed:
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
+            )
+            os.close(descriptor)
+            temporary = Path(temporary_name)
+            save_annotation(temporary, annotation)
+            temporary_paths.append((temporary, destination))
+        for temporary, destination in temporary_paths:
+            os.replace(temporary, destination)
+    except OSError as error:
+        typer.echo(f"ERROR: could not write completed annotations: {error}", err=True)
+        raise typer.Exit(1) from error
+    finally:
+        for temporary, _destination in temporary_paths:
+            temporary.unlink(missing_ok=True)
+
+    typer.echo(
+        f"Completed {len(completed)} chapter(s); added {added_segments} narrator segment(s)."
+    )
 
 
 @render_app.command("capabilities")

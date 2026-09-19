@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from .models import ChapterLineRange, Scene
+from .models import ChapterLineRange, LineRange, Scene
 
 SCENE_ID_RE = re.compile(r"^S(\d{4,})$")
 
@@ -46,6 +47,12 @@ def load_scenes(path: Path) -> list[Scene]:
             raise ValueError(f"scene {index}: id and summary must be strings")
         scenes.append(Scene(scene_id, refs, summary))
     return scenes
+
+
+def find_scene(scenes: Iterable[Scene], chapter: str | int, lines: LineRange) -> Scene | None:
+    """Return the unique scene that contains a chapter and complete line range."""
+    matches = [scene for scene in scenes if scene.covers(str(chapter), lines)]
+    return matches[0] if len(matches) == 1 else None
 
 
 def scene_to_dict(scene: Scene) -> dict[str, Any]:

@@ -17,10 +17,10 @@ from .annotation_schema import (
 )
 from .annotations import load_annotation
 from .book import Book
-from .models import ValidationIssue
+from .models import Scene, ValidationIssue
 from .persons import load_persons
 from .preprocessing import read_processed
-from .scenes import SCENE_ID_RE, load_scenes
+from .scenes import SCENE_ID_RE, find_scene, load_scenes
 
 
 class Validator:
@@ -34,7 +34,9 @@ class Validator:
     def warning(self, path: Path, message: str) -> None:
         self.issues.append(ValidationIssue("WARNING", path, message))
 
-    def validate(self, chapter: str | None = None) -> list[ValidationIssue]:
+    def validate(
+        self, chapter: str | None = None, *, require_coverage: bool = True
+    ) -> list[ValidationIssue]:
         self.issues = []
         try:
             source_paths = self.book.source_chapters()
@@ -59,12 +61,12 @@ class Validator:
         )
         self._validate_annotations(
             source_by_stem,
-            source_by_number,
             processed_counts,
             people_names,
             scenes,
             scene_indexes,
             chapter,
+            require_coverage,
         )
         return self.issues
 
@@ -178,7 +180,7 @@ class Validator:
         source_by_stem: dict[str, Path],
         source_by_number: dict[int, str],
         processed_counts: dict[str, int],
-    ) -> tuple[dict[str, object], dict[str, int]]:
+    ) -> tuple[dict[str, Scene], dict[str, int]]:
         path = self.book.scenes_path
         if not path.exists():
             self.error(path, "scenes.yaml is missing")
@@ -240,12 +242,12 @@ class Validator:
     def _validate_annotations(
         self,
         source_by_stem: dict[str, Path],
-        source_by_number: dict[int, str],
         processed_counts: dict[str, int],
         people_names: set[str],
-        scenes: dict[str, object],
+        scenes: dict[str, Scene],
         scene_indexes: dict[str, int],
         chapter: str | None,
+        require_coverage: bool,
     ) -> None:
         for stem in source_by_stem:
             if chapter is not None and int(stem) != int(chapter):
@@ -269,19 +271,13 @@ class Validator:
             previous_end = 0
             previous_scene_index = -1
             previous_segment = None
+            previous_scene_id: str | None = None
             for index, segment in enumerate(annotation.segments, 1):
                 label = f"segment {index} ({segment.line.format()})"
                 if segment.line.end > line_count:
                     self.error(path, f"{label} exceeds chapter length {line_count}")
                 if segment.line.start <= previous_end:
                     self.error(path, f"{label} overlaps or is out of order")
-                if (
-                    previous_segment is not None
-                    and previous_segment.line.end + 1 == segment.line.start
-                    and previous_segment.merge_key() == segment.merge_key()
-                ):
-                    self.warning(path, f"{label} can be merged with the preceding segment")
-                previous_segment = segment
                 previous_end = max(previous_end, segment.line.end)
                 for number in range(segment.line.start, min(segment.line.end, line_count) + 1):
                     covered[number] += 1
@@ -298,38 +294,45 @@ class Validator:
                 if segment.name == UNKNOWN_NAME and not segment.review:
                     self.warning(path, f"{label} uses {UNKNOWN_NAME} without review: true")
 
-                scene = scenes.get(segment.scene_id)
+                scene = find_scene(scenes.values(), stem, segment.line)
                 if scene is None:
-                    self.error(path, f"{label} references missing scene {segment.scene_id}")
+                    self.error(path, f"{label} is outside or crosses scene ranges")
+                    previous_scene_id = None
                 else:
-                    # Scene is a Scene; object keeps this module independent of casts.
-                    if not scene.covers(stem, segment.line):  # type: ignore[attr-defined]
-                        self.error(path, f"{label} is outside scene {segment.scene_id}")
-                    current_scene_index = scene_indexes[segment.scene_id]
+                    if (
+                        previous_segment is not None
+                        and previous_segment.line.end + 1 == segment.line.start
+                        and previous_segment.merge_key() == segment.merge_key()
+                        and previous_scene_id == scene.id
+                    ):
+                        self.warning(path, f"{label} can be merged with the preceding segment")
+                    current_scene_index = scene_indexes[scene.id]
                     if current_scene_index < previous_scene_index:
                         self.error(path, f"{label} moves backwards in scene order")
                     previous_scene_index = current_scene_index
+                    previous_scene_id = scene.id
+                previous_segment = segment
 
-            missing = [number for number in range(1, line_count + 1) if covered[number] == 0]
+            if require_coverage:
+                missing = [number for number in range(1, line_count + 1) if covered[number] == 0]
+                if missing:
+                    self.error(path, f"uncovered lines: {self._compact_numbers(missing)}")
             overlaps = [number for number in range(1, line_count + 1) if covered[number] > 1]
-            if missing:
-                self.error(path, f"uncovered lines: {self._compact_numbers(missing)}")
             if overlaps:
                 self.error(path, f"multiply covered lines: {self._compact_numbers(overlaps)}")
 
-    def _validate_style(self, path: Path, label: str, style: dict[str, str | None] | None) -> None:
+    def _validate_style(self, path: Path, label: str, style: dict[str, str] | None) -> None:
         if style is None:
             return
         unknown = set(style) - set(STYLE_FIELDS)
         if unknown:
             self.error(path, f"{label} has unknown style fields: {', '.join(sorted(unknown))}")
         if not style:
-            self.warning(path, f"{label} should use style: null instead of an empty mapping")
+            self.error(path, f"{label} style must contain at least one field")
+            return
         for key, value in style.items():
-            if value is None:
-                continue
             if not isinstance(value, str):
-                self.error(path, f"{label} style.{key} must be a string or null")
+                self.error(path, f"{label} style.{key} must be a string")
                 continue
             if key in STYLE_VALUES and value not in STYLE_VALUES[key]:
                 allowed = ", ".join(STYLE_VALUES[key])
@@ -355,5 +358,10 @@ class Validator:
         return ", ".join(ranges)
 
 
-def validate_book(book: Book, chapter: str | None = None) -> list[ValidationIssue]:
-    return Validator(book).validate(chapter)
+def validate_book(
+    book: Book,
+    chapter: str | None = None,
+    *,
+    require_coverage: bool = True,
+) -> list[ValidationIssue]:
+    return Validator(book).validate(chapter, require_coverage=require_coverage)

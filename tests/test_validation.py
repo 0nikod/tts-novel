@@ -23,12 +23,10 @@ def make_book(tmp_path: Path) -> Book:
         "    name: NARRATOR\n"
         "    type: narration\n"
         "    style: null\n"
-        "    scene_id: S0001\n"
         "  - line: 2\n"
         "    name: 小明\n"
         "    type: dialogue\n"
-        "    style: null\n"
-        "    scene_id: S0001\n",
+        "    style: null\n",
         encoding="utf-8",
     )
     return book
@@ -38,22 +36,52 @@ def test_valid_book(tmp_path: Path) -> None:
     assert validate_book(make_book(tmp_path)) == []
 
 
-def test_reports_gap_unknown_person_and_scene_mismatch(tmp_path: Path) -> None:
+def test_reports_gap_and_unknown_person(tmp_path: Path) -> None:
     book = make_book(tmp_path)
     (book.annotations_dir / "001.yaml").write_text(
-        "chapter: 1\n"
-        "segments:\n"
-        "  - line: 2\n"
-        "    name: 路人\n"
-        "    type: dialogue\n"
-        "    style: null\n"
-        "    scene_id: S9999\n",
+        "chapter: 1\nsegments:\n  - line: 2\n    name: 路人\n    type: dialogue\n    style: null\n",
         encoding="utf-8",
     )
     messages = [issue.message for issue in validate_book(book)]
     assert any("unknown person" in message for message in messages)
-    assert any("missing scene" in message for message in messages)
     assert any("uncovered lines: 1" in message for message in messages)
+
+
+def test_rejects_segment_outside_scene_ranges(tmp_path: Path) -> None:
+    book = make_book(tmp_path)
+    book.scenes_path.write_text(
+        "scenes:\n  - id: S0001\n    line: '001:1-1'\n    summary: 错误范围\n",
+        encoding="utf-8",
+    )
+
+    messages = [issue.message for issue in validate_book(book)]
+    assert any("outside or crosses scene ranges" in message for message in messages)
+
+
+def test_rejects_segment_crossing_scene_ranges(tmp_path: Path) -> None:
+    book = make_book(tmp_path)
+    book.scenes_path.write_text(
+        "scenes:\n"
+        "  - id: S0001\n"
+        "    line: '001:1-1'\n"
+        "    summary: 第一场\n"
+        "  - id: S0002\n"
+        "    line: '001:2-2'\n"
+        "    summary: 第二场\n",
+        encoding="utf-8",
+    )
+    (book.annotations_dir / "001.yaml").write_text(
+        "chapter: 1\n"
+        "segments:\n"
+        "  - line: 1-2\n"
+        "    name: NARRATOR\n"
+        "    type: narration\n"
+        "    style: null\n",
+        encoding="utf-8",
+    )
+
+    messages = [issue.message for issue in validate_book(book)]
+    assert any("outside or crosses scene ranges" in message for message in messages)
 
 
 def test_detects_scene_range_out_of_bounds(tmp_path: Path) -> None:

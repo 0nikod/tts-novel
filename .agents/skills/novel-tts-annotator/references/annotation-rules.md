@@ -2,7 +2,7 @@
 
 ## Canonical vocabulary
 
-`src/novel_tts/annotation_schema.yaml` is the sole source of truth for annotation types, person roles, reserved system names, review reasons, style fields, and style values. Use `TEXT_TYPES`, `PERSON_ROLES`, `SYSTEM_NAMES`, `REVIEW_REASONS`, `STYLE_FIELDS`, and `STYLE_VALUES` from that module; this reference explains their semantics but does not define a separate vocabulary. Renderer mappings, including `render/styles.yaml`, never extend the annotation taxonomy.
+`src/novel_tts/annotation_schema.yaml` is the source of truth for annotation vocabulary, while `docs/annotation.schema.yaml` defines the YAML document shape. Use `TEXT_TYPES`, `PERSON_ROLES`, `SYSTEM_NAMES`, `REVIEW_REASONS`, `STYLE_FIELDS`, and `STYLE_VALUES` from that module; this reference explains their semantics but does not define a separate vocabulary. Renderer mappings, including `render/styles.yaml`, never extend the annotation taxonomy.
 
 ## Speaker (`name`)
 
@@ -51,7 +51,7 @@ A narration line adjacent to dialogue remains a separate narration segment even 
 
 ## Style
 
-Default to `style: null`. If explicit source evidence justifies style, use only fields from `STYLE_FIELDS`, and use only a value listed for that field in `STYLE_VALUES`. These constants—not prose examples and not renderer/provider mappings—are authoritative. Never invent a short English value or treat `render/styles.yaml` as an annotation vocabulary extension.
+If no explicit source evidence justifies a style, omit the `style` field; `style: null` is equivalent and also accepted. If explicit source evidence justifies style, use only fields from `STYLE_FIELDS`, include only fields with explicit values, and use only a value listed for that field in `STYLE_VALUES`. Nested `null` values are not used inside a style mapping. These constants—not prose examples and not renderer/provider mappings—are authoritative. Never invent a short English value or treat `render/styles.yaml` as an annotation vocabulary extension.
 
 Examples of explicit evidence:
 
@@ -60,13 +60,18 @@ Examples of explicit evidence:
 - “他小声耳语” may justify the canonical whisper delivery value.
 - “她笑道” may justify the canonical laugh vocal action when the laughter is part of delivery.
 
-Do not infer style from punctuation alone. Do not carry a style into later speech unless the source continues to state it. Unspecified fields should be present with `null` when a style mapping is used.
+Do not infer style from punctuation alone. Do not carry a style into later speech unless the source continues to state it. Omit unspecified fields when a style mapping is used.
+
+## Sparse annotations
+
+The annotator may read the entire chapter for context while writing only explicit dialogue, represented thought, and deliberately reviewed narration segments. Ordinary uncovered prose is completed by `novel-tts fill-annotations`, which writes `NARRATOR`/`narration` ranges according to `scenes.yaml`. The completion step preserves explicit segment names, types, styles, and review fields, and refuses overlaps, invalid ranges, or segments crossing scene boundaries.
 
 ## Scenes
 
 Keep one scene while an event or conversation proceeds continuously, even if paragraphs shift focus among participants. Split when there is a clear jump to a new independent event, timeline, narrative thread, or disconnected conversation.
 
 A chapter boundary does not force a scene boundary. For a cross-chapter scene, use one scene with ordered line entries for both chapters.
+`scenes.yaml` owns the line-to-scene mapping. Annotation segments contain only their chapter-relative line range and semantic annotation fields; resolve their scene from the complete range rather than copying a `scene_id`. A segment must fit wholly within one scene range.
 
 Scene summaries should be short factual descriptions grounded in the text. Do not include analysis or hidden metadata.
 
