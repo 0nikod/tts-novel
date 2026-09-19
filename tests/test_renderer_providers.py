@@ -2,6 +2,8 @@ import base64
 import json
 from pathlib import Path
 
+import pytest
+
 from novel_tts.renderer.models import (
     CompiledStyle,
     PreparedRequest,
@@ -61,6 +63,24 @@ def test_fish_request_uses_reference_id_and_bracket_style(tmp_path: Path) -> Non
     assert request.json_body["reference_id"] == "voice-id"
     assert request.json_body["text"] == "[shouting][loud]住手！"
     assert request.json_body["prosody"]["volume"] == 3
+
+
+def test_fish_driver_rejects_streaming_profiles() -> None:
+    profile = RenderProfile(
+        id="fish",
+        provider="fish_audio",
+        model="s2-pro",
+        api_key_env="FISH_AUDIO_API_KEY",
+        request={"format": "wav", "stream": True},
+    )
+    job = make_job(
+        profile,
+        VoiceSpec(kind=VoiceMode.SAVED_REFERENCE, reference_id="voice-id"),
+        CompiledStyle(text="住手！"),
+    )
+
+    with pytest.raises(ValueError, match="Fish streaming is not supported"):
+        FishAudioDriver().prepare(job, "secret")
 
 
 def test_mimo_preset_request_separates_instruction_and_spoken_text(tmp_path: Path) -> None:

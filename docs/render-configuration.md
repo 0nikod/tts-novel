@@ -193,7 +193,7 @@ voices:
       voice: 冰糖
 ```
 
-The first-level key must be a canonical annotation name. Include every name actually used by the selected annotations, including `NARRATOR` and `EXTRA` where applicable.
+The first-level key must be a canonical annotation name. Include every name actually used by the selected annotations, including `NARRATOR` and `EXTRA` where applicable. Reusing the active narrator voice for `EXTRA` is the default recommendation, not a schema requirement; an explicitly user-approved separate `EXTRA` voice is valid.
 
 Source IDs such as `mimo-main` are local stable labels. They are not profile IDs or provider voice names.
 

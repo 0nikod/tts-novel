@@ -15,7 +15,7 @@ for fish_model in ("s2-pro", "s2.1-pro", "s2.1-pro-free"):
             provider="fish_audio",
             model=fish_model,
             voice_modes=frozenset({VoiceMode.SAVED_REFERENCE, VoiceMode.INLINE_CLONE}),
-            streaming_modes=frozenset({StreamingMode.NONE, StreamingMode.REALTIME}),
+            streaming_modes=frozenset({StreamingMode.NONE}),
             output_formats=frozenset({"wav", "pcm", "mp3", "opus"}),
             style_controls=frozenset({"bracket_tags", "prosody"}),
             supports_multi_speaker=True,

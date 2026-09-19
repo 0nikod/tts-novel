@@ -87,7 +87,7 @@ Use only user-provided or already verified values for:
 
 Paths are relative to `render/voices.yaml`. Validate that reference files exist before planning.
 
-The project casting policy keeps `EXTRA` on the narrator voice. Copy the complete `NARRATOR` source definitions to `EXTRA` and ensure their active selections resolve identically. If no narrator source exists, report the missing casting decision instead of inventing one.
+By default, propose reusing the active `NARRATOR` voice for `EXTRA`, because incidental speakers usually do not need separate casting. This is a recommendation, not an invariant: if the user explicitly chooses a different `EXTRA` voice, preserve that choice. If neither a narrator source nor a user-approved alternative exists, report the missing casting decision instead of inventing one.
 
 ### 3. Select active sources
 

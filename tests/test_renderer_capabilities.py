@@ -20,6 +20,11 @@ from novel_tts.renderer.models import (
 )
 
 
+def test_fish_models_are_non_streaming_only() -> None:
+    for model in ("s2-pro", "s2.1-pro", "s2.1-pro-free"):
+        assert get_capabilities("fish_audio", model).streaming_modes == {StreamingMode.NONE}
+
+
 def test_mimo_models_expose_different_voice_capabilities() -> None:
     preset = get_capabilities("mimo", "mimo-v2.5-tts")
     design = get_capabilities("mimo", "mimo-v2.5-tts-voicedesign")
@@ -30,6 +35,25 @@ def test_mimo_models_expose_different_voice_capabilities() -> None:
     assert clone.voice_modes == {VoiceMode.INLINE_CLONE}
     assert StreamingMode.REALTIME in preset.streaming_modes
     assert StreamingMode.REALTIME not in design.streaming_modes
+
+
+def test_render_config_rejects_fish_streaming(tmp_path: Path) -> None:
+    render = tmp_path / "render"
+    render.mkdir()
+    (render / "config.yaml").write_text(
+        "profiles:\n"
+        "  fish:\n"
+        "    provider: fish_audio\n"
+        "    model: s2-pro\n"
+        "    api_key_env: FISH_AUDIO_API_KEY\n"
+        "    request:\n"
+        "      format: wav\n"
+        "      stream: true\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="streaming mode realtime is unsupported"):
+        load_render_config(tmp_path)
 
 
 def test_catalog_rejects_voice_mode_unsupported_by_model(tmp_path: Path) -> None:

@@ -44,6 +44,8 @@ class FishAudioDriver(ProviderDriver):
         latency = request.get("latency", "normal")
         if latency not in {"normal", "balanced", "low"}:
             raise ValueError("Fish latency must be normal, balanced, or low")
+        if request.get("stream", False):
+            raise ValueError("Fish streaming is not supported by this renderer")
         audio_format = request.get("format", "wav")
         if audio_format == "mp3" and request.get("mp3_bitrate", 128) not in {64, 128, 192}:
             raise ValueError("Fish mp3_bitrate must be 64, 128, or 192")

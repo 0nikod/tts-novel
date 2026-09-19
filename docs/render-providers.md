@@ -8,9 +8,9 @@ For the common YAML schema and workflow, see [render-configuration.md](render-co
 
 | Provider | Model | Voice kinds | Request formats | Streaming mode |
 |---|---|---|---|---|
-| `fish_audio` | `s2-pro` | `saved_reference`, `inline_clone` | `wav`, `pcm`, `mp3`, `opus` | capability known, but current Fish driver sends complete-response jobs |
-| `fish_audio` | `s2.1-pro` | `saved_reference`, `inline_clone` | `wav`, `pcm`, `mp3`, `opus` | same |
-| `fish_audio` | `s2.1-pro-free` | `saved_reference`, `inline_clone` | `wav`, `pcm`, `mp3`, `opus` | same |
+| `fish_audio` | `s2-pro` | `saved_reference`, `inline_clone` | `wav`, `pcm`, `mp3`, `opus` | non-streaming only |
+| `fish_audio` | `s2.1-pro` | `saved_reference`, `inline_clone` | `wav`, `pcm`, `mp3`, `opus` | non-streaming only |
+| `fish_audio` | `s2.1-pro-free` | `saved_reference`, `inline_clone` | `wav`, `pcm`, `mp3`, `opus` | non-streaming only |
 | `mimo` | `mimo-v2.5-tts` | `preset` | `wav`, `mp3`, `pcm`, `pcm16` | non-streaming or realtime SSE |
 | `mimo` | `mimo-v2.5-tts-voicedesign` | `text_design` | `wav`, `mp3`, `pcm`, `pcm16` | non-streaming or buffered SSE |
 | `mimo` | `mimo-v2.5-tts-voiceclone` | `inline_clone` | `wav`, `mp3`, `pcm`, `pcm16` | non-streaming or buffered SSE |
@@ -187,7 +187,7 @@ profiles:
       unsupported: error
 ```
 
-The current Fish driver sends complete-response requests. Omit `stream` or keep it false when writing renderer configuration; realtime playback is not exposed by this CLI.
+The current Fish driver sends complete-response requests only. Omit `stream` or set it to `false`; `stream: true` is rejected during configuration loading instead of being silently downgraded.
 
 ### Saved reference
 
