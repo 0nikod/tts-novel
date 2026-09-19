@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import yaml
 
-from .annotation_schema import PERSON_ROLES, SYSTEM_NAMES, PersonRole
+from .annotation_schema import SYSTEM_NAMES
 from .models import Person
 
 
@@ -18,61 +18,53 @@ def load_persons(path: Path) -> list[Person]:
         raise ValueError(f"invalid YAML: {error}") from error
     if not isinstance(data, dict) or not isinstance(data.get("persons"), list):
         raise ValueError("root must be a mapping containing a persons list")
+    extra = set(data) - {"persons"}
+    if extra:
+        raise ValueError("persons root has unsupported fields: " + ", ".join(sorted(extra)))
 
     people: list[Person] = []
     for index, item in enumerate(data["persons"], 1):
         if not isinstance(item, dict):
             raise ValueError(f"person {index} must be a mapping")
-        extra = set(item) - {"name", "aliases", "role"}
+        extra = set(item) - {"name", "aliases"}
         if extra:
             raise ValueError(
                 f"person {index} has unsupported fields: " + ", ".join(sorted(map(str, extra)))
             )
-        missing = {"name", "aliases", "role"} - set(item)
-        if missing:
-            raise ValueError(
-                f"person {index} is missing fields: " + ", ".join(sorted(map(str, missing)))
-            )
-
+        if "name" not in item:
+            raise ValueError(f"person {index} is missing name")
         name = item["name"]
-        aliases = item["aliases"]
-        role = item["role"]
+        aliases: Any = item.get("aliases", [])
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"person {index}: name must be a non-empty string")
         if not isinstance(aliases, list) or any(
             not isinstance(alias, str) or not alias.strip() for alias in aliases
         ):
             raise ValueError(f"person {index}: aliases must be a list of non-empty strings")
-        if role not in PERSON_ROLES:
-            allowed = ", ".join(PERSON_ROLES)
-            raise ValueError(f"person {index}: invalid role {role!r}; allowed values: {allowed}")
-        people.append(Person(name=name, aliases=aliases, role=cast("PersonRole", role)))
+        people.append(Person(name=name, aliases=list(aliases)))
     return people
 
 
 def person_to_dict(person: Person) -> dict[str, Any]:
-    return {
-        "name": person.name,
-        "aliases": person.aliases,
-        "role": person.role,
-    }
+    return {"name": person.name, "aliases": person.aliases}
 
 
 def save_persons(path: Path, people: list[Person]) -> None:
-    data = {"persons": [person_to_dict(person) for person in people]}
     path.write_text(
-        yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=1000),
+        yaml.safe_dump(
+            {"persons": [person_to_dict(person) for person in people]},
+            allow_unicode=True,
+            sort_keys=False,
+            width=1000,
+        ),
         encoding="utf-8",
     )
 
 
-def person_names(people: list[Person]) -> set[str]:
-    return {person.name for person in people} | set(SYSTEM_NAMES)
+def person_names(people: list[Person], *, include_system: bool = True) -> set[str]:
+    names = {person.name for person in people}
+    return names | set(SYSTEM_NAMES) if include_system else names
 
 
 def alias_map(people: list[Person]) -> dict[str, str]:
-    aliases: dict[str, str] = {}
-    for person in people:
-        for alias in person.aliases:
-            aliases[alias] = person.name
-    return aliases
+    return {alias: person.name for person in people for alias in person.aliases}

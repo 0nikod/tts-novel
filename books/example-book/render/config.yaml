@@ -1,44 +1,17 @@
-profiles:
-  mimo-preset:
-    provider: mimo
-    model: mimo-v2.5-tts
-    api_key_env: MIMO_API_KEY
-    request:
-      format: wav
-      stream: false
-    concurrency: 2
-    timeout_seconds: 120
-    retries: 4
-    style_policy:
-      unsupported: error
-
+endpoint: http://127.0.0.1:8000/v1/tts
+model: custom-model
+api_key_env: TTS_API_KEY
+concurrency: 2
+timeout_seconds: 120
+retries: 2
 output:
   sample_rate: 24000
   channels: 1
-  sample_format: s16
   final_format: mp3
-
 assembly:
-  chunk_gap_ms: 0
   dialogue_gap_ms: 180
   narration_gap_ms: 260
   scene_gap_ms: 800
   chapter_gap_ms: 1500
-
 execution:
   max_chars_per_request: 200
-  manifest_flush_interval_seconds: 1.0
-
-review:
-  fail_on_review: true
-  fail_on_unknown: true
-
-timeline:
-  enabled: true
-  include_silence_events: true
-  subtitles:
-    formats:
-      - srt
-      - vtt
-    show_speaker: true
-    include_narration: true

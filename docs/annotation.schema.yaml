@@ -1,163 +1,119 @@
+# Generated from src/novel_tts/annotation_schema.py.
+# Do not edit manually.
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://example.invalid/novel-tts/annotation.schema.yaml
-title: Novel TTS chapter annotation
-description: >-
-  Structural schema for a chapter annotation YAML file. Sparse annotations are
-  valid: the annotator may write only explicit dialogue, represented thought,
-  or deliberately reviewed narration segments. Run novel-tts fill-annotations
-  to fill uncovered lines with NARRATOR/narration segments.
-
-# This file is JSON Schema written in YAML. It describes the shape of
-# annotations/*.yaml; semantic coverage and scene membership are checked by
-# novel-tts validate and novel-tts fill-annotations.
+title: tts-novel sparse annotation
+description: Provider-neutral sparse semantic annotation. Uncovered processed lines are NARRATOR/narration at runtime.
 type: object
 additionalProperties: false
 required:
-  - chapter
-  - segments
+- segments
 properties:
-  chapter:
-    description: Numeric chapter identifier; either a YAML integer or numeric string.
-    oneOf:
-      - type: integer
-        minimum: 0
-      - type: string
-        pattern: '^[0-9]+$'
   segments:
-    description: >-
-      Annotation segments. Ordering and non-overlap are checked by
-      novel-tts validate; coverage may be sparse before completion.
     type: array
     items:
       $ref: '#/$defs/segment'
 $defs:
-  segment:
-    title: Annotation segment
-    description: >-
-      A consecutive chapter-relative line range and its semantic annotation.
-      scene_id is intentionally not a property: scenes.yaml owns the
-      line-to-scene mapping.
-    type: object
-    additionalProperties: false
-    required:
-      - line
-      - name
-      - type
-    properties:
-      line:
-        description: >-
-          One positive line number or a positive line range such as 12-15.
-          Range ordering is checked by novel-tts validate.
-        oneOf:
-          - type: integer
-            minimum: 1
-          - type: string
-            pattern: '^(?:0*[1-9][0-9]*)(?:-(?:0*[1-9][0-9]*))?$'
-      name:
-        description: Canonical person name, NARRATOR, UNKNOWN, or another configured system/person name.
-        type: string
-        minLength: 1
-      type:
-        description: Text semantic type.
-        type: string
-        enum:
-          - narration
-          - dialogue
-          - thought
-      style:
-        description: >-
-          Optional explicit speaking-style mapping. Omit this property when
-          there is no explicit style; omission and null have the same meaning.
-          A present mapping must contain at least one non-null explicit value.
-        oneOf:
-          - type: 'null'
-          - $ref: '#/$defs/style'
-      review:
-        description: Set true when a human must resolve meaningful uncertainty.
-        type: boolean
-        default: false
-      review_reason:
-        description: Required when review is true; forbidden otherwise.
-        type: string
-        enum:
-          - ambiguous_speaker
-          - ambiguous_type
-          - ambiguous_style
-          - ambiguous_scene
-          - unknown_character
-          - preprocess_error
-    allOf:
-      - if:
-          properties:
-            review:
-              const: true
-          required:
-            - review
-        then:
-          required:
-            - review_reason
-      - if:
-          properties:
-            review:
-              const: false
-          required:
-            - review
-        then:
-          not:
-            required:
-              - review_reason
-      - if:
-          not:
-            required:
-              - review
-        then:
-          not:
-            required:
-              - review_reason
+  line-range:
+    oneOf:
+    - type: integer
+      minimum: 1
+    - type: string
+      pattern: ^[1-9][0-9]*-[1-9][0-9]*$
   style:
-    title: Explicit speaking style
-    description: >-
-      Only canonical style fields are allowed. A style mapping contains only
-      values explicitly supported by the source text.
     type: object
-    minProperties: 1
     additionalProperties: false
+    minProperties: 1
     properties:
       emotion:
         type: string
         enum:
-          - angry
-          - calm
-          - excited
-          - happy
-          - nervous
-          - sad
-          - shocked
+        - angry
+        - calm
+        - excited
+        - happy
+        - nervous
+        - sad
+        - shocked
+        description: Emotion explicitly stated by the text.
       delivery:
         type: string
         enum:
-          - scolding
-          - shout
-          - whisper
+        - scolding
+        - shout
+        - whisper
+        description: Explicit manner of delivery.
       volume:
         type: string
         enum:
-          - high
-          - low
+        - high
+        - low
+        description: Explicit relative vocal volume.
       pace:
         type: string
         enum:
-          - fast
-          - slow
+        - fast
+        - slow
+        description: Explicit relative reading pace.
       vocal_action_before:
         type: string
         enum:
-          - laugh
-          - sigh
-          - deep_breath
+        - laugh
+        - sigh
+        - deep_breath
+        description: Explicit vocal action immediately before the text.
       vocal_action_after:
         type: string
         enum:
-          - laugh
-          - sigh
-          - deep_breath
+        - laugh
+        - sigh
+        - deep_breath
+        description: Explicit vocal action immediately after the text.
+  segment:
+    type: object
+    additionalProperties: false
+    required:
+    - line
+    - name
+    properties:
+      line:
+        $ref: '#/$defs/line-range'
+      name:
+        type: string
+        minLength: 1
+        description: 'Canonical person name or system name: NARRATOR, UNKNOWN, EXTRA, EXTRA_MALE, EXTRA_FEMALE.'
+      type:
+        type: string
+        enum:
+        - narration
+        - dialogue
+        - thought
+        default: dialogue
+      style:
+        $ref: '#/$defs/style'
+      review:
+        type: boolean
+        default: false
+    allOf:
+    - if:
+        properties:
+          name:
+            const: UNKNOWN
+        required:
+        - name
+      then:
+        properties:
+          review:
+            const: true
+        required:
+        - review
+    - if:
+        properties:
+          review:
+            const: true
+        required:
+        - review
+      then:
+        properties:
+          name:
+            const: UNKNOWN

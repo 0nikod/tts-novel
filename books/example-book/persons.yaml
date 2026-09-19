@@ -1,16 +1,7 @@
 persons:
-  - name: 孔乙己
-    aliases: []
-    role: main
-
-  - name: 酒店伙计
-    aliases: []
-    role: secondary
-
-  - name: 掌柜
-    aliases: []
-    role: secondary
-
-  - name: EXTRA
-    aliases: []
-    role: minor
+- name: 孔乙己
+  aliases: []
+- name: 酒店伙计
+  aliases: []
+- name: 掌柜
+  aliases: []

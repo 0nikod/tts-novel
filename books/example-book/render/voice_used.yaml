@@ -1,2 +1,8 @@
-default_profile: mimo-preset
-voices: {}
+voices:
+  NARRATOR: narrator-main
+  孔乙己: male-old-01
+  酒店伙计: male-young-01
+  掌柜: male-old-01
+  EXTRA: narrator-main
+  EXTRA_MALE: male-young-01
+  EXTRA_FEMALE: female-young-01

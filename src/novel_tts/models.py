@@ -4,18 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from . import annotation_schema as _annotation_schema
-
-# Public domain constants; annotation_schema.yaml remains the vocabulary source of truth.
-TextType = _annotation_schema.TextType
-PersonRole = _annotation_schema.PersonRole
-ReviewReason = _annotation_schema.ReviewReason
-STYLE_FIELDS = _annotation_schema.STYLE_FIELDS
-NARRATOR_NAME = _annotation_schema.NARRATOR_NAME
-UNKNOWN_NAME = _annotation_schema.UNKNOWN_NAME
-# Set-shaped views are convenient for membership checks in existing consumers.
-REVIEW_REASONS = set(_annotation_schema.REVIEW_REASONS)
-SYSTEM_NAMES = set(_annotation_schema.SYSTEM_NAMES)
+from .annotation_schema import NARRATOR_NAME
 
 
 @dataclass(frozen=True, order=True)
@@ -38,16 +27,30 @@ class LineRange:
         if not isinstance(value, str):
             raise ValueError("line must be an integer or a range string")
         value = value.strip()
+        if not value:
+            raise ValueError("line must not be empty")
         if "-" not in value:
-            return cls(int(value), int(value))
-        start, end = value.split("-", 1)
-        return cls(int(start), int(end))
+            try:
+                number = int(value)
+            except ValueError as error:
+                raise ValueError("line must be an integer or start-end range") from error
+            return cls(number, number)
+        parts = value.split("-")
+        if len(parts) != 2:
+            raise ValueError("line range must use start-end format")
+        try:
+            return cls(int(parts[0]), int(parts[1]))
+        except ValueError as error:
+            raise ValueError("line range must use integer start-end values") from error
 
     def format(self) -> int | str:
         return self.start if self.start == self.end else f"{self.start}-{self.end}"
 
     def contains(self, other: LineRange) -> bool:
         return self.start <= other.start and self.end >= other.end
+
+    def overlaps(self, other: LineRange) -> bool:
+        return self.start <= other.end and other.start <= self.end
 
 
 @dataclass(frozen=True)
@@ -69,53 +72,45 @@ class ChapterLineRange:
         return f"{self.chapter}:{self.lines.format()}"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Person:
     name: str
-    role: PersonRole
     aliases: list[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Scene:
     id: str
     line: list[ChapterLineRange]
     summary: str
 
-    def covers(self, chapter: str, lines: LineRange) -> bool:
+    def covers(self, chapter: str | int, lines: LineRange) -> bool:
         return any(
-            int(ref.chapter) == int(chapter) and ref.lines.contains(lines) for ref in self.line
+            int(reference.chapter) == int(chapter) and reference.lines.contains(lines)
+            for reference in self.line
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Segment:
     line: LineRange
     name: str
-    type: TextType
-    style: dict[str, str] | None
+    type: str = "dialogue"
+    style: dict[str, str] | None = None
     review: bool = False
-    review_reason: ReviewReason | None = None
 
     def merge_key(self) -> tuple[Any, ...]:
-        style = (
-            None
-            if self.style is None
-            else tuple((key, self.style.get(key)) for key in STYLE_FIELDS)
-        )
-        return (
-            self.name,
-            self.type,
-            style,
-            self.review,
-            self.review_reason,
-        )
+        style = None if self.style is None else tuple(sorted(self.style.items()))
+        return self.name, self.type, style, self.review
+
+    @classmethod
+    def narrator(cls, line: LineRange) -> Segment:
+        return cls(line=line, name=NARRATOR_NAME, type="narration")
 
 
-@dataclass
+@dataclass(frozen=True)
 class Annotation:
-    chapter: int | str
-    segments: list[Segment]
+    segments: list[Segment] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

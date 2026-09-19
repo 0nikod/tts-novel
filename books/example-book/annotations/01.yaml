@@ -1,165 +1,42 @@
-# Annotation schema: chapter is numeric; segments are ordered consecutive line ranges.
-# Each segment uses a canonical name, a type (narration/dialogue/thought), and optional review fields.
-# Omit style when there is no explicit style; scene_id is not written because scenes.yaml owns mapping.
-chapter: 1
 segments:
-  - line: 1-3
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 4-6
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 7
-    name: EXTRA
-    type: dialogue
-    style: null
-  - line: 8
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 9
-    name: 孔乙己
-    type: dialogue
-    style: null
-  - line: 10
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 11
-    name: EXTRA
-    type: dialogue
-    style:
-      delivery: shout
-      volume: high
-  - line: 12
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 13
-    name: 孔乙己
-    type: dialogue
-    style: null
-  - line: 14
-    name: EXTRA
-    type: dialogue
-    style: null
-  - line: 15
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 16
-    name: 孔乙己
-    type: dialogue
-    style: null
-  - line: 17
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 18
-    name: 孔乙己
-    type: dialogue
-    style: null
-  - line: 19
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 20
-    name: 孔乙己
-    type: dialogue
-    style: null
-  - line: 21
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 22
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 23
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 24
-    name: EXTRA
-    type: dialogue
-    style: null
-  - line: 25
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 26
-    name: EXTRA
-    type: dialogue
-    style: null
-  - line: 27
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 28
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 29
-    name: 孔乙己
-    type: dialogue
-    style: null
-  - line: 30
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 31
-    name: 孔乙己
-    type: dialogue
-    style: null
-  - line: 32
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 33
-    name: 孔乙己
-    type: dialogue
-    style: null
-  - line: 34
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 35
-    name: 酒店伙计
-    type: dialogue
-    style: null
-  - line: 36
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 37
-    name: 孔乙己
-    type: dialogue
-    style:
-      emotion: happy
-  - line: 38
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 39
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 40
-    name: 孔乙己
-    type: dialogue
-    style:
-      emotion: nervous
-  - line: 41
-    name: NARRATOR
-    type: narration
-    style: null
-  - line: 42
-    name: 孔乙己
-    type: dialogue
-    style: null
-  - line: 43-44
-    name: NARRATOR
-    type: narration
-    style: null
+- line: 7
+  name: EXTRA
+- line: 9
+  name: 孔乙己
+- line: 11
+  name: EXTRA
+  style:
+    delivery: shout
+    volume: high
+- line: 13
+  name: 孔乙己
+- line: 14
+  name: EXTRA
+- line: 16
+  name: 孔乙己
+- line: 18
+  name: 孔乙己
+- line: 20
+  name: 孔乙己
+- line: 24
+  name: EXTRA
+- line: 26
+  name: EXTRA
+- line: 29
+  name: 孔乙己
+- line: 31
+  name: 孔乙己
+- line: 33
+  name: 孔乙己
+- line: 35
+  name: 酒店伙计
+- line: 37
+  name: 孔乙己
+  style:
+    emotion: happy
+- line: 40
+  name: 孔乙己
+  style:
+    emotion: nervous
+- line: 42
+  name: 孔乙己

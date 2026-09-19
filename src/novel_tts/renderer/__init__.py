@@ -1,6 +1,6 @@
-"""Capability-aware, provider-independent TTS rendering."""
+"""Private custom-model TTS planning and rendering."""
 
-from .capabilities import all_capabilities, get_capabilities
+from .custom_tts import CustomTTS
 from .planner import build_render_plan
 
-__all__ = ["all_capabilities", "build_render_plan", "get_capabilities"]
+__all__ = ["CustomTTS", "build_render_plan"]

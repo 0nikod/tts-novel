@@ -1,67 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 
-class VoiceMode(StrEnum):
-    PRESET = "preset"
-    SAVED_REFERENCE = "saved_reference"
-    INLINE_CLONE = "inline_clone"
-    TEXT_DESIGN = "text_design"
-
-
-class StreamingMode(StrEnum):
-    NONE = "none"
-    REALTIME = "realtime"
-    BUFFERED = "buffered"
-
-
 @dataclass(frozen=True)
-class ModelCapabilities:
-    provider: str
-    model: str
-    voice_modes: frozenset[VoiceMode]
-    streaming_modes: frozenset[StreamingMode]
-    output_formats: frozenset[str]
-    style_controls: frozenset[str]
-    supports_multi_speaker: bool = False
-    supports_timestamps: bool = False
-    reference_audio_formats: frozenset[str] = frozenset()
-    max_reference_audio_bytes: int | None = None
-
-
-@dataclass(frozen=True)
-class VoiceSpec:
-    kind: VoiceMode
-    voice: str | None = None
-    reference_id: str | None = None
-    reference_audio: Path | None = None
-    reference_text: str | None = None
-    description: str | None = None
-
-
-@dataclass(frozen=True)
-class RenderProfile:
+class Voice:
     id: str
-    provider: str
-    model: str
-    api_key_env: str
-    request: dict[str, Any]
-    concurrency: int = 1
-    timeout_seconds: float = 120
-    retries: int = 4
-    unsupported_style: str = "error"
+    parameters: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class OutputConfig:
     sample_rate: int = 24000
     channels: int = 1
-    sample_format: str = "s16"
-    final_format: str = "wav"
+    final_format: str = "mp3"
 
 
 @dataclass(frozen=True)
@@ -76,54 +30,25 @@ class AssemblyConfig:
 @dataclass(frozen=True)
 class ExecutionConfig:
     max_chars_per_request: int = 200
-    manifest_flush_interval_seconds: float = 1.0
-
-
-@dataclass(frozen=True)
-class ReviewPolicy:
-    fail_on_review: bool = True
-    fail_on_unknown: bool = True
-
-
-@dataclass(frozen=True)
-class TimelineConfig:
-    enabled: bool = True
-    include_silence_events: bool = True
-    subtitle_formats: tuple[str, ...] = ("srt", "vtt")
-    show_speaker: bool = True
-    include_narration: bool = True
 
 
 @dataclass(frozen=True)
 class RenderConfig:
     root: Path
-    profiles: dict[str, RenderProfile]
+    endpoint: str
+    model: str
+    api_key_env: str
+    concurrency: int = 2
+    timeout_seconds: float = 120
+    retries: int = 2
     output: OutputConfig = field(default_factory=OutputConfig)
     assembly: AssemblyConfig = field(default_factory=AssemblyConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
-    review: ReviewPolicy = field(default_factory=ReviewPolicy)
-    timeline: TimelineConfig = field(default_factory=TimelineConfig)
-
-
-@dataclass(frozen=True)
-class VoiceSource:
-    id: str
-    profile_id: str
-    voice: VoiceSpec
-
-
-@dataclass(frozen=True)
-class VoiceUsage:
-    default_profile: str
-    overrides: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class CompiledStyle:
-    text: str
-    instruction: str | None = None
-    request_overrides: dict[str, Any] = field(default_factory=dict)
-    unsupported_fields: tuple[str, ...] = ()
+    values: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -132,21 +57,16 @@ class RenderJob:
     chapter: str
     line_start: int
     line_end: int
-    scene_id: str
+    text: str
     name: str
     text_type: str
-    source_text: str
-    style: dict[str, str | None] | None
-    review: bool
-    review_reason: str | None
-    profile: RenderProfile
-    voice: VoiceSpec
-    voice_source: str
+    style: dict[str, str] | None
+    voice: Voice
     chunk_index: int
     chunk_count: int
-    compiled: CompiledStyle
     cache_key: str
-    legacy_cache_key: str | None = None
+    compiled_style: CompiledStyle = field(default_factory=CompiledStyle)
+    scene_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -171,17 +91,9 @@ class RenderPlan:
 
 
 @dataclass(frozen=True)
-class PreparedRequest:
-    url: str
-    headers: dict[str, str]
-    json_body: dict[str, Any] | None = None
-    content: bytes | None = None
-    response_kind: str = "raw"
-    audio_format: str = "wav"
-
-
-@dataclass(frozen=True)
-class ProviderResult:
+class AudioResult:
     audio: bytes
-    audio_format: str
+    audio_format: str = "wav"
     request_id: str | None = None
+    attempts: int = 1
+    elapsed_ms: int = 0

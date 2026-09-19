@@ -1,140 +1,158 @@
 from __future__ import annotations
 
+import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import yaml
 
-from .annotation_schema import NARRATOR_NAME, REVIEW_REASONS, STYLE_FIELDS, STYLE_VALUES, TEXT_TYPES
-from .models import Annotation, LineRange, ReviewReason, Scene, Segment, TextType
-from .scenes import find_scene
+from .annotation_schema import STYLE_FIELDS, STYLE_VALUES, TEXT_TYPES
+from .models import Annotation, LineRange, ProcessedLine, Segment
 
 
 def load_annotation(path: Path) -> Annotation:
+    """Load one sparse annotation file.
+
+    The chapter comes exclusively from the filename. Missing segment fields use
+    the canonical sparse defaults: dialogue, no style, and no review.
+    """
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError as error:
+        raise ValueError(f"annotation does not exist: {path}") from error
     except yaml.YAMLError as error:
         raise ValueError(f"invalid YAML: {error}") from error
+    if data is None:
+        data = {"segments": []}
     if not isinstance(data, dict):
         raise ValueError("annotation root must be a mapping")
-    root_extra = set(data) - {"chapter", "segments"}
-    if root_extra:
+    extra = set(data) - {"segments"}
+    if extra:
+        raise ValueError("annotation has unsupported fields: " + ", ".join(sorted(map(str, extra))))
+    if not isinstance(data.get("segments"), list):
+        raise ValueError("annotation requires a segments list")
+
+    segments = [_load_segment(item, index) for index, item in enumerate(data["segments"], 1)]
+    return Annotation(segments)
+
+
+def _load_segment(item: Any, index: int) -> Segment:
+    if not isinstance(item, dict):
+        raise ValueError(f"segment {index} must be a mapping")
+    allowed = {"line", "name", "type", "style", "review"}
+    extra = set(item) - allowed
+    if extra:
         raise ValueError(
-            "annotation has unsupported fields: " + ", ".join(sorted(map(str, root_extra)))
+            f"segment {index} has unsupported fields: " + ", ".join(sorted(map(str, extra)))
         )
-    if "chapter" not in data or "segments" not in data:
-        raise ValueError("annotation requires chapter and segments")
-    chapter = data["chapter"]
-    if isinstance(chapter, bool) or not isinstance(chapter, (int, str)):
-        raise ValueError("chapter must be an integer or numeric string")
-    if not str(chapter).isdigit():
-        raise ValueError("chapter must be numeric")
-    if not isinstance(data["segments"], list):
-        raise ValueError("segments must be a list")
+    missing = {"line", "name"} - set(item)
+    if missing:
+        raise ValueError(f"segment {index} missing: {', '.join(sorted(missing))}")
+    raw_line = item["line"]
+    if isinstance(raw_line, str) and re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*", raw_line) is None:
+        raise ValueError(f"segment {index}: line range must use start-end format")
+    try:
+        lines = LineRange.parse(raw_line)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"segment {index}: {error}") from error
 
-    segments: list[Segment] = []
-    for index, item in enumerate(data["segments"], 1):
-        if not isinstance(item, dict):
-            raise ValueError(f"segment {index} must be a mapping")
-        allowed = {"line", "name", "type", "style", "review", "review_reason"}
-        extra = set(item) - allowed
-        if extra:
-            raise ValueError(
-                f"segment {index} has unsupported fields: " + ", ".join(sorted(map(str, extra)))
-            )
-        required = ("line", "name", "type")
-        missing = [key for key in required if key not in item]
-        if missing:
-            raise ValueError(f"segment {index} missing: {', '.join(missing)}")
-        try:
-            lines = LineRange.parse(item["line"])
-        except (TypeError, ValueError) as error:
-            raise ValueError(f"segment {index}: {error}") from error
-        style = item.get("style")
-        if style is not None and not isinstance(style, dict):
-            raise ValueError(f"segment {index}: style must be null or a mapping")
-        if style is not None:
-            if not style:
-                raise ValueError(f"segment {index}: style must contain at least one field")
-            if any(not isinstance(key, str) for key in style):
-                raise ValueError(f"segment {index}: style field names must be strings")
-            unknown_style_fields = set(style) - set(STYLE_FIELDS)
-            if unknown_style_fields:
-                names = ", ".join(sorted(map(str, unknown_style_fields)))
-                raise ValueError(f"segment {index}: unsupported style fields: {names}")
-            for field, value in style.items():
-                if not isinstance(value, str):
-                    raise ValueError(f"segment {index}: style.{field} must be a string")
-                if value not in STYLE_VALUES[field]:
-                    allowed = ", ".join(STYLE_VALUES[field])
-                    raise ValueError(
-                        f"segment {index}: invalid style.{field} value {value!r}; "
-                        f"allowed values: {allowed}"
-                    )
-        review = item.get("review", False)
-        if not isinstance(review, bool):
-            raise ValueError(f"segment {index}: review must be boolean")
-        for key in ("name", "type"):
-            if not isinstance(item[key], str):
-                raise ValueError(f"segment {index}: {key} must be a string")
-        if item["type"] not in TEXT_TYPES:
-            allowed_types = ", ".join(TEXT_TYPES)
-            raise ValueError(
-                f"segment {index}: invalid type {item['type']!r}; allowed values: {allowed_types}"
-            )
-        review_reason = item.get("review_reason")
-        if review_reason is not None:
-            if not isinstance(review_reason, str):
-                raise ValueError(f"segment {index}: review_reason must be a string")
-            if review_reason not in REVIEW_REASONS:
-                allowed_reasons = ", ".join(REVIEW_REASONS)
-                raise ValueError(
-                    f"segment {index}: invalid review_reason {review_reason!r}; "
-                    f"allowed values: {allowed_reasons}"
-                )
-        segments.append(
-            Segment(
-                line=lines,
-                name=item["name"],
-                type=cast("TextType", item["type"]),
-                style=style,
-                review=review,
-                review_reason=cast("ReviewReason | None", review_reason),
-            )
+    name = item["name"]
+    text_type = item.get("type", "dialogue")
+    review = item.get("review", False)
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(f"segment {index}: name must be a non-empty string")
+    if not isinstance(text_type, str) or text_type not in TEXT_TYPES:
+        allowed_types = ", ".join(TEXT_TYPES)
+        raise ValueError(
+            f"segment {index}: invalid type {text_type!r}; allowed values: {allowed_types}"
         )
-    return Annotation(chapter, segments)
+    if not isinstance(review, bool):
+        raise ValueError(f"segment {index}: review must be boolean")
+    if "style" in item and item["style"] is None:
+        raise ValueError(f"segment {index}: omit style instead of using null")
+    style = _load_style(item.get("style"), index)
+    return Segment(lines, name, text_type, style, review)
 
 
-def segment_to_dict(segment: Segment) -> dict[str, Any]:
-    item: dict[str, Any] = {
-        "line": segment.line.format(),
-        "name": segment.name,
-        "type": segment.type,
-    }
+def _load_style(value: Any, index: int) -> dict[str, str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"segment {index}: style must be null or a mapping")
+    if not value:
+        raise ValueError(f"segment {index}: style must contain at least one field")
+    if any(not isinstance(key, str) for key in value):
+        raise ValueError(f"segment {index}: style field names must be strings")
+    unknown = set(value) - set(STYLE_FIELDS)
+    if unknown:
+        raise ValueError(
+            f"segment {index}: unsupported style fields: " + ", ".join(sorted(unknown))
+        )
+    style: dict[str, str] = {}
+    for field in STYLE_FIELDS:
+        if field not in value:
+            continue
+        style_value = value[field]
+        if not isinstance(style_value, str):
+            raise ValueError(f"segment {index}: style.{field} must be a string")
+        if style_value not in STYLE_VALUES[field]:
+            allowed = ", ".join(STYLE_VALUES[field])
+            raise ValueError(
+                f"segment {index}: invalid style.{field} value {style_value!r}; "
+                f"allowed values: {allowed}"
+            )
+        style[field] = style_value
+    return style
+
+
+def segment_to_dict(segment: Segment, *, include_defaults: bool = False) -> dict[str, Any]:
+    item: dict[str, Any] = {"line": segment.line.format(), "name": segment.name}
+    if include_defaults or segment.type != "dialogue":
+        item["type"] = segment.type
     if segment.style is not None:
         item["style"] = segment.style
     if segment.review:
         item["review"] = True
-    if segment.review_reason is not None:
-        item["review_reason"] = segment.review_reason
+    elif include_defaults:
+        item["review"] = False
     return item
 
 
-def complete_annotation(
-    annotation: Annotation,
-    line_count: int,
-    scenes: list[Scene],
-) -> Annotation:
-    """Fill uncovered lines with narrator narration segments.
+def annotation_to_data(annotation: Annotation, *, include_defaults: bool = False) -> dict[str, Any]:
+    return {
+        "segments": [
+            segment_to_dict(segment, include_defaults=include_defaults)
+            for segment in annotation.segments
+        ]
+    }
 
-    Explicit segments are preserved in their original order. Every explicit and
-    generated segment must fit wholly within one scene from ``scenes.yaml``.
-    """
-    if line_count < 0:
-        raise ValueError("line_count must not be negative")
 
+def dump_annotation(annotation: Annotation, *, include_defaults: bool = False) -> str:
+    return yaml.safe_dump(
+        annotation_to_data(annotation, include_defaults=include_defaults),
+        allow_unicode=True,
+        sort_keys=False,
+        width=1000,
+    )
+
+
+def save_annotation(path: Path, annotation: Annotation) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dump_annotation(annotation), encoding="utf-8")
+
+
+def materialize_annotation(
+    processed_lines: Sequence[ProcessedLine],
+    sparse_segments: Sequence[Segment],
+) -> list[Segment]:
+    """Fill sparse gaps with narrator segments without modifying canonical YAML."""
+    numbers = [line.number for line in processed_lines]
+    if numbers != list(range(1, len(processed_lines) + 1)):
+        raise ValueError("processed line numbers must be continuous from 1")
+    line_count = len(processed_lines)
     previous_end = 0
-    for index, segment in enumerate(annotation.segments, 1):
+    for index, segment in enumerate(sparse_segments, 1):
         if segment.line.end > line_count:
             raise ValueError(
                 f"segment {index} ({segment.line.format()}) exceeds chapter length {line_count}"
@@ -143,69 +161,21 @@ def complete_annotation(
             raise ValueError(
                 f"segment {index} ({segment.line.format()}) overlaps or is out of order"
             )
-        if find_scene(scenes, annotation.chapter, segment.line) is None:
-            raise ValueError(
-                f"segment {index} ({segment.line.format()}) is outside or crosses scene ranges"
-            )
         previous_end = segment.line.end
 
-    completed: list[Segment] = []
+    effective: list[Segment] = []
     cursor = 1
-    for segment in annotation.segments:
+    for segment in sparse_segments:
         if cursor < segment.line.start:
-            completed.extend(
-                _narrator_segments(
-                    annotation.chapter,
-                    LineRange(cursor, segment.line.start - 1),
-                    scenes,
-                )
-            )
-        completed.append(segment)
+            effective.append(Segment.narrator(LineRange(cursor, segment.line.start - 1)))
+        effective.append(segment)
         cursor = segment.line.end + 1
     if cursor <= line_count:
-        completed.extend(
-            _narrator_segments(annotation.chapter, LineRange(cursor, line_count), scenes)
-        )
-    return Annotation(annotation.chapter, completed)
+        effective.append(Segment.narrator(LineRange(cursor, line_count)))
+    return merge_adjacent_segments(effective)
 
 
-def _narrator_segments(
-    chapter: int | str,
-    lines: LineRange,
-    scenes: list[Scene],
-) -> list[Segment]:
-    generated: list[Segment] = []
-    start = lines.start
-    current_scene = find_scene(scenes, chapter, LineRange(start, start))
-    if current_scene is None:
-        raise ValueError(f"line {start} is outside or crosses scene ranges")
-    for number in range(start + 1, lines.end + 1):
-        scene = find_scene(scenes, chapter, LineRange(number, number))
-        if scene is None:
-            raise ValueError(f"line {number} is outside or crosses scene ranges")
-        if scene.id != current_scene.id:
-            generated.append(
-                Segment(LineRange(start, number - 1), NARRATOR_NAME, "narration", None)
-            )
-            start = number
-            current_scene = scene
-    generated.append(Segment(LineRange(start, lines.end), NARRATOR_NAME, "narration", None))
-    return generated
-
-
-def save_annotation(path: Path, annotation: Annotation) -> None:
-    data = {
-        "chapter": annotation.chapter,
-        "segments": [segment_to_dict(segment) for segment in annotation.segments],
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=1000),
-        encoding="utf-8",
-    )
-
-
-def merge_adjacent_segments(segments: list[Segment]) -> list[Segment]:
+def merge_adjacent_segments(segments: Sequence[Segment]) -> list[Segment]:
     merged: list[Segment] = []
     for segment in segments:
         if (
@@ -215,19 +185,12 @@ def merge_adjacent_segments(segments: list[Segment]) -> list[Segment]:
         ):
             previous = merged[-1]
             merged[-1] = Segment(
-                line=LineRange(previous.line.start, segment.line.end),
-                name=previous.name,
-                type=previous.type,
-                style=previous.style,
-                review=previous.review,
-                review_reason=previous.review_reason,
+                LineRange(previous.line.start, segment.line.end),
+                previous.name,
+                previous.type,
+                previous.style,
+                previous.review,
             )
         else:
             merged.append(segment)
     return merged
-
-
-def canonical_style(style: dict[str, str] | None) -> dict[str, str] | None:
-    if style is None:
-        return None
-    return dict(style)
