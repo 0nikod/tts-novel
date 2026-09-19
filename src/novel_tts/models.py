@@ -6,6 +6,9 @@ from typing import Any, Literal
 
 from .annotation_schema import NARRATOR_NAME
 
+StyleValue = str | list[str]
+Style = dict[str, StyleValue]
+
 
 @dataclass(frozen=True, order=True)
 class LineRange:
@@ -96,11 +99,20 @@ class Segment:
     line: LineRange
     name: str
     type: str = "dialogue"
-    style: dict[str, str] | None = None
+    style: Style | None = None
     review: bool = False
 
     def merge_key(self) -> tuple[Any, ...]:
-        style = None if self.style is None else tuple(sorted(self.style.items()))
+        style = (
+            None
+            if self.style is None
+            else tuple(
+                sorted(
+                    (field, tuple(value) if isinstance(value, list) else value)
+                    for field, value in self.style.items()
+                )
+            )
+        )
         return self.name, self.type, style, self.review
 
     @classmethod

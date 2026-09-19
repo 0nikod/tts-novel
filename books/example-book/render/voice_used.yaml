@@ -1,8 +1,8 @@
 voices:
   NARRATOR: narrator-main
-  孔乙己: male-old-01
+  孔乙己: kong-designed
   酒店伙计: male-young-01
-  掌柜: male-old-01
+  掌柜: manager-old-preset
   EXTRA: narrator-main
   EXTRA_MALE: male-young-01
   EXTRA_FEMALE: female-young-01

@@ -1,9 +1,27 @@
-endpoint: http://127.0.0.1:8000/v1/tts
-model: custom-model
-api_key_env: TTS_API_KEY
-concurrency: 2
-timeout_seconds: 120
-retries: 2
+target: mimo-mixed
+default_profile: mimo-preset
+profiles:
+  mimo-preset:
+    provider: mimo
+    model: mimo-v2.5-tts
+    api_key_env: MIMO_API_KEY
+    request:
+      format: wav
+      stream: false
+    concurrency: 2
+    timeout_seconds: 120
+    retries: 2
+  mimo-design:
+    provider: mimo
+    model: mimo-v2.5-tts-voicedesign
+    api_key_env: MIMO_API_KEY
+    request:
+      format: wav
+      stream: false
+      optimize_text_preview: false
+    concurrency: 1
+    timeout_seconds: 120
+    retries: 2
 output:
   sample_rate: 24000
   channels: 1

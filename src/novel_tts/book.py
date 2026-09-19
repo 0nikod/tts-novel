@@ -8,12 +8,20 @@ import yaml
 
 from .annotation_schema import ANNOTATION_MODES, DEFAULT_ANNOTATION_MODE
 
-_DEFAULT_RENDER_CONFIG = """endpoint: http://127.0.0.1:8000/v1/tts
-model: custom-model
-api_key_env: TTS_API_KEY
-concurrency: 2
-timeout_seconds: 120
-retries: 2
+_DEFAULT_RENDER_CONFIG = """target: main
+default_profile: custom-main
+profiles:
+  custom-main:
+    provider: custom
+    endpoint: http://127.0.0.1:8000/v1/tts
+    model: custom-model
+    api_key_env: TTS_API_KEY
+    request:
+      audio_format: wav
+      response_kind: auto
+    concurrency: 2
+    timeout_seconds: 120
+    retries: 2
 
 output:
   sample_rate: 24000
@@ -75,10 +83,6 @@ class Book:
     def voice_used_path(self) -> Path:
         return self.render_dir / "voice_used.yaml"
 
-    @property
-    def styles_path(self) -> Path:
-        return self.render_dir / "styles.yaml"
-
     def initialize(self) -> list[Path]:
         """Create a usable book skeleton without overwriting existing files."""
         created: list[Path] = []
@@ -98,7 +102,6 @@ class Book:
             self.render_config_path: _DEFAULT_RENDER_CONFIG,
             self.voices_path: "voices: {}\n",
             self.voice_used_path: "voices: {}\n",
-            self.styles_path: "{}\n",
             self.render_dir / ".gitignore": "cache/\nmanifests/\noutput/\n",
         }
         for path, content in defaults.items():

@@ -7,8 +7,8 @@ from typing import Any
 
 import yaml
 
-from .annotation_schema import STYLE_FIELDS, STYLE_VALUES, TEXT_TYPES
-from .models import Annotation, LineRange, ProcessedLine, Segment
+from .annotation_schema import STYLE_FIELDS, STYLE_TAG_FIELDS, TEXT_TYPES
+from .models import Annotation, LineRange, ProcessedLine, Segment, Style
 
 
 def load_annotation(path: Path) -> Annotation:
@@ -75,7 +75,7 @@ def _load_segment(item: Any, index: int) -> Segment:
     return Segment(lines, name, text_type, style, review)
 
 
-def _load_style(value: Any, index: int) -> dict[str, str] | None:
+def _load_style(value: Any, index: int) -> Style | None:
     if value is None:
         return None
     if not isinstance(value, dict):
@@ -89,21 +89,28 @@ def _load_style(value: Any, index: int) -> dict[str, str] | None:
         raise ValueError(
             f"segment {index}: unsupported style fields: " + ", ".join(sorted(unknown))
         )
-    style: dict[str, str] = {}
+    style: Style = {}
     for field in STYLE_FIELDS:
         if field not in value:
             continue
         style_value = value[field]
-        if not isinstance(style_value, str):
-            raise ValueError(f"segment {index}: style.{field} must be a string")
-        if style_value not in STYLE_VALUES[field]:
-            allowed = ", ".join(STYLE_VALUES[field])
-            raise ValueError(
-                f"segment {index}: invalid style.{field} value {style_value!r}; "
-                f"allowed values: {allowed}"
-            )
+        if field in STYLE_TAG_FIELDS:
+            style[field] = _load_tags(style_value, index, field)
+            continue
+        if not isinstance(style_value, str) or not style_value.strip():
+            raise ValueError(f"segment {index}: style.{field} must be a non-empty string")
         style[field] = style_value
     return style
+
+
+def _load_tags(value: Any, index: int, field: str) -> list[str]:
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"segment {index}: style.{field} must be a non-empty list")
+    if any(not isinstance(tag, str) or not tag.strip() for tag in value):
+        raise ValueError(f"segment {index}: style.{field} items must be non-empty strings")
+    if len(set(value)) != len(value):
+        raise ValueError(f"segment {index}: style.{field} must not contain duplicates")
+    return list(value)
 
 
 def segment_to_dict(segment: Segment, *, include_defaults: bool = False) -> dict[str, Any]:

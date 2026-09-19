@@ -14,14 +14,22 @@ _GENERATED_HEADER = (
 
 
 def annotation_json_schema() -> dict[str, Any]:
-    style_properties = {
-        field: {
-            "type": "string",
-            "enum": list(spec["values"]),
-            "description": spec["description"],
-        }
-        for field, spec in STYLE_SCHEMA.items()
-    }
+    style_properties: dict[str, Any] = {}
+    for field, spec in STYLE_SCHEMA.items():
+        if spec["kind"] == "direction":
+            style_properties[field] = {
+                "type": "string",
+                "minLength": 1,
+                "description": spec["description"],
+            }
+        else:
+            style_properties[field] = {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": True,
+                "items": {"type": "string", "minLength": 1},
+                "description": spec["description"],
+            }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://example.invalid/novel-tts/annotation.schema.yaml",

@@ -1,12 +1,23 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from ..annotation_schema import UNKNOWN_NAME
-from .models import AssemblyConfig, ExecutionConfig, OutputConfig, RenderConfig, Voice
+from .models import (
+    AssemblyConfig,
+    ExecutionConfig,
+    OutputConfig,
+    RenderConfig,
+    RenderProfile,
+    Voice,
+)
+from .providers import get_provider
+
+_TARGET_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
 def _load_yaml(path: Path) -> Any:
@@ -39,63 +50,124 @@ def load_render_config(book_root: Path) -> RenderConfig:
     _reject_extra(
         data,
         {
-            "endpoint",
-            "model",
-            "api_key_env",
-            "concurrency",
-            "timeout_seconds",
-            "retries",
+            "target",
+            "default_profile",
+            "profiles",
             "output",
             "assembly",
             "execution",
         },
         "render config",
     )
-    endpoint = data.get("endpoint")
-    model = data.get("model")
-    api_key_env = data.get("api_key_env")
-    for field, value in (
-        ("endpoint", endpoint),
-        ("model", model),
-        ("api_key_env", api_key_env),
-    ):
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"render config {field} must be a non-empty string")
 
-    output = _parse_output(_mapping(data.get("output", {}), "output"))
-    assembly = _parse_assembly(_mapping(data.get("assembly", {}), "assembly"))
-    execution = _parse_execution(_mapping(data.get("execution", {}), "execution"))
+    target = data.get("target")
+    if not isinstance(target, str) or not _TARGET_PATTERN.fullmatch(target):
+        raise ValueError(
+            "render config target must start with an ASCII letter or digit and contain only "
+            "letters, digits, '.', '_', or '-'"
+        )
+
+    raw_profiles = _mapping(data.get("profiles"), "profiles")
+    if not raw_profiles:
+        raise ValueError("render config profiles must not be empty")
+    profiles: dict[str, RenderProfile] = {}
+    for profile_id, raw_profile in raw_profiles.items():
+        if not profile_id.strip():
+            raise ValueError("profile IDs must be non-empty strings")
+        item = _mapping(raw_profile, f"profile {profile_id}")
+        _reject_extra(
+            item,
+            {
+                "provider",
+                "endpoint",
+                "model",
+                "api_key_env",
+                "request",
+                "concurrency",
+                "timeout_seconds",
+                "retries",
+            },
+            f"profile {profile_id}",
+        )
+        provider_id = item.get("provider")
+        if not isinstance(provider_id, str) or not provider_id.strip():
+            raise ValueError(f"profile {profile_id} provider must be a non-empty string")
+        try:
+            adapter = get_provider(provider_id)
+        except ValueError as error:
+            raise ValueError(f"profile {profile_id}: {error}") from error
+
+        endpoint = item.get("endpoint", adapter.default_endpoint)
+        model = item.get("model")
+        api_key_env = item.get("api_key_env")
+        for field, value in (
+            ("endpoint", endpoint),
+            ("model", model),
+            ("api_key_env", api_key_env),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"profile {profile_id} {field} must be a non-empty string")
+
+        profile = RenderProfile(
+            id=profile_id,
+            provider=provider_id,
+            endpoint=endpoint,
+            model=model,
+            api_key_env=api_key_env,
+            request=dict(_mapping(item.get("request", {}), f"profile {profile_id}.request")),
+            concurrency=_positive_int(
+                item.get("concurrency", 1), f"profile {profile_id}.concurrency"
+            ),
+            timeout_seconds=_positive_number(
+                item.get("timeout_seconds", 120), f"profile {profile_id}.timeout_seconds"
+            ),
+            retries=_nonnegative_int(item.get("retries", 2), f"profile {profile_id}.retries"),
+        )
+        errors = adapter.validate_profile(profile)
+        if errors:
+            raise ValueError(f"profile {profile_id}: {'; '.join(errors)}")
+        profiles[profile_id] = profile
+
+    default_profile = data.get("default_profile")
+    if not isinstance(default_profile, str) or default_profile not in profiles:
+        raise ValueError(
+            f"render config default_profile {default_profile!r} does not reference a profile"
+        )
+
     return RenderConfig(
         root=render_root,
-        endpoint=endpoint,
-        model=model,
-        api_key_env=api_key_env,
-        concurrency=_positive_int(data.get("concurrency", 2), "concurrency"),
-        timeout_seconds=_positive_number(data.get("timeout_seconds", 120), "timeout_seconds"),
-        retries=_nonnegative_int(data.get("retries", 2), "retries"),
-        output=output,
-        assembly=assembly,
-        execution=execution,
+        target=target,
+        default_profile=default_profile,
+        profiles=profiles,
+        output=_parse_output(_mapping(data.get("output", {}), "output")),
+        assembly=_parse_assembly(_mapping(data.get("assembly", {}), "assembly")),
+        execution=_parse_execution(_mapping(data.get("execution", {}), "execution")),
     )
 
 
-def load_voice_catalog(render_root: Path) -> dict[str, Voice]:
+def load_voice_catalog(render_root: Path, config: RenderConfig) -> dict[str, Voice]:
     path = render_root / "voices.yaml"
     data = _mapping(_load_yaml(path), f"voice catalog {path}")
     _reject_extra(data, {"voices"}, f"voice catalog {path}")
     raw_voices = _mapping(data.get("voices"), "voices")
     catalog: dict[str, Voice] = {}
-    for voice_id, raw_parameters in raw_voices.items():
+
+    for voice_id, raw_voice in raw_voices.items():
         if not voice_id.strip():
             raise ValueError("voice IDs must be non-empty strings")
-        parameters = _mapping(raw_parameters, f"voice {voice_id}")
-        legacy = set(parameters) & {"profile", "provider", "kind"}
-        if legacy:
+        item = dict(_mapping(raw_voice, f"voice {voice_id}"))
+        profile_id = item.pop("profile", config.default_profile)
+        if not isinstance(profile_id, str) or profile_id not in config.profiles:
             raise ValueError(
-                f"voice {voice_id!r} contains obsolete provider fields: "
-                + ", ".join(sorted(legacy))
+                f"voice {voice_id!r} profile {profile_id!r} does not reference a profile"
             )
-        catalog[voice_id] = Voice(voice_id, dict(parameters))
+        if not item:
+            raise ValueError(f"voice {voice_id!r} has no provider parameters")
+        catalog[voice_id] = Voice(
+            id=voice_id,
+            profile_id=profile_id,
+            parameters=item,
+        )
     return catalog
 
 
@@ -122,6 +194,10 @@ def resolve_voice(name: str, catalog: dict[str, Voice], usage: dict[str, str]) -
         return catalog[voice_id]
     except KeyError as error:
         raise ValueError(f"voice {voice_id!r} selected for {name!r} does not exist") from error
+
+
+def render_target(config: RenderConfig) -> str:
+    return config.target
 
 
 def _parse_output(data: dict[str, Any]) -> OutputConfig:

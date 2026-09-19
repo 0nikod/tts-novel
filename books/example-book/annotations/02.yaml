@@ -22,7 +22,7 @@ segments:
 - line: 16
   name: 孔乙己
   style:
-    volume: low
+    direction: 以极低的声音说。
 - line: 18
   name: 孔乙己
 - line: 20
@@ -30,11 +30,11 @@ segments:
 - line: 22
   name: 孔乙己
   style:
-    emotion: sad
+    direction: 颓唐地说。
 - line: 24
   name: 掌柜
   style:
-    vocal_action_before: laugh
+    tags_before: [笑]
 - line: 26
   name: 孔乙己
 - line: 27
@@ -42,7 +42,7 @@ segments:
 - line: 29
   name: 孔乙己
   style:
-    volume: low
+    direction: 低声说。
 - line: 32
   name: 掌柜
 - line: 34

@@ -6,8 +6,7 @@ segments:
 - line: 11
   name: EXTRA
   style:
-    delivery: shout
-    volume: high
+    direction: 故意提高音量嚷道。
 - line: 13
   name: 孔乙己
 - line: 14
@@ -33,10 +32,10 @@ segments:
 - line: 37
   name: 孔乙己
   style:
-    emotion: happy
+    direction: 极高兴地说。
 - line: 40
   name: 孔乙己
   style:
-    emotion: nervous
+    direction: 慌张地说。
 - line: 42
   name: 孔乙己

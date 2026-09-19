@@ -23,7 +23,7 @@ uv run novel-tts inspect books/my-book --chapter 001
 uv run novel-tts render validate books/my-book
 uv run novel-tts render plan books/my-book
 
-# 只有此命令会调用私有 TTS API
+# 只有此命令会调用所选 TTS provider
 uv run novel-tts render run books/my-book --env-file .env
 ```
 
@@ -38,10 +38,9 @@ books/<book>/
 ├── persons.yaml               # 人物 canonical identity 与 alias
 ├── scenes.yaml                # 可选元数据
 └── render/
-    ├── config.yaml            # 私有 custom TTS API
+    ├── config.yaml            # target、profiles 与执行配置
     ├── voices.yaml            # 可用音源目录
     ├── voice_used.yaml        # 本书 casting
-    ├── styles.yaml            # 可选 style 编译覆盖
     ├── cache/                 # 运行数据
     ├── manifests/             # 运行记录
     └── output/                # 音频
@@ -51,10 +50,10 @@ books/<book>/
 
 ```text
 source → processed → annotations + persons → effective segments
-       → voice selection → custom TTS jobs → cache → audio
+       → voice selection → provider adapter → cache → audio
 ```
 
-`scenes.yaml` 和 `render/styles.yaml` 都是可选增强，不是 annotation 的依赖。
+`scenes.yaml` 是可选增强，不是 annotation 的依赖。
 
 ## 稀疏 annotation
 
@@ -71,8 +70,8 @@ segments:
   - line: 11
     name: EXTRA
     style:
-      delivery: shout
-      volume: high
+      direction: 提高音量喊话，语速急促。
+      tags_before: [深呼吸]
 
   - line: 35
     name: UNKNOWN
@@ -93,13 +92,14 @@ segments:
     name: 孔乙己
     type: thought
     style:
-      emotion: nervous
+      direction: 低声、迟疑，后半句逐渐疲惫。
+      tags_after: [苦笑]
 
   - line: 40-42
     name: NARRATOR
     type: narration
     style:
-      pace: slow
+      direction: 放慢语速，保持克制。
 ```
 
 系统名称为 `NARRATOR`、`UNKNOWN`、`EXTRA`、`EXTRA_MALE`、`EXTRA_FEMALE`，不得写入 `persons.yaml`。`UNKNOWN` 必须使用 `review: true`，并会阻止正式 render。
@@ -116,30 +116,35 @@ uv run novel-tts agent-context books/my-book 003 --previous-lines 30
 uv run novel-tts agent-context books/my-book 003 --no-existing --format json
 ```
 
-默认只包含 annotation mode、系统名称、style vocabulary、人物与 alias、前章末尾 20 行、当前 processed 全文和已有 sparse annotation；不会读取 scenes 或 render 配置。
+默认只包含 annotation mode、系统名称、自然语言 style 字段、人物与 alias、前章末尾 20 行、当前 processed 全文和已有 sparse annotation；不会读取 scenes 或 render 配置。
 
-## 私有 TTS renderer
+## Multi-provider TTS renderer
 
-renderer 只有一个 custom backend。`render/voices.yaml` 保存音源，`render/voice_used.yaml` 保存人物到音源的选择：
+Renderer 当前内置 `custom` 和 Xiaomi MiMo V2.5 TTS adapter。`render/config.yaml` 可以声明多个 profile；每个 voice 选择一个 profile，因此同一计划可以混合 provider/model。Annotation 不保存任何模型信息。
+
+`render/voices.yaml` 的 voice ID 表示一个具体可执行音源。省略 `profile` 时使用 `default_profile`：
 
 ```yaml
 # render/voices.yaml
 voices:
-  narrator-main:
-    reference_id: narrator-001
-  male-old-01:
-    reference_id: male-old-003
+  narrator-designed:
+    profile: mimo-design
+    mode: design
+    description: 平静、克制的近距离小说旁白声。
+  male-old-preset:
+    mode: preset
+    voice: 白桦
 ```
 
 ```yaml
 # render/voice_used.yaml
 voices:
-  NARRATOR: narrator-main
-  孔乙己: male-old-01
-  EXTRA: narrator-main
+  NARRATOR: narrator-designed
+  孔乙己: male-old-preset
+  EXTRA: narrator-designed
 ```
 
-多个人物可以共享声音；禁止为 `UNKNOWN` 配置声音。模型接口、cache key、失败恢复和拼接规则见 [docs/rendering.md](docs/rendering.md)。
+多个人物可以共享声音；禁止为 `UNKNOWN` 配置声音。配置、cache 和拼接规则见 [docs/rendering.md](docs/rendering.md)，Custom/MiMo 协议见 [docs/providers.md](docs/providers.md)。
 
 ## 常用命令
 
@@ -153,6 +158,7 @@ novel-tts review BOOK
 novel-tts inspect BOOK --chapter 003 [--format text|yaml|json]
 novel-tts schema annotation [--output PATH]
 
+novel-tts render providers
 novel-tts render validate BOOK
 novel-tts render plan BOOK [--chapter 003]
 novel-tts render run BOOK [--chapter 003] [--env-file .env]

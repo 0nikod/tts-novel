@@ -4,11 +4,27 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..models import Style
+
 
 @dataclass(frozen=True)
 class Voice:
     id: str
+    profile_id: str
     parameters: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RenderProfile:
+    id: str
+    provider: str
+    endpoint: str
+    model: str
+    api_key_env: str
+    request: dict[str, Any] = field(default_factory=dict)
+    concurrency: int = 1
+    timeout_seconds: float = 120
+    retries: int = 2
 
 
 @dataclass(frozen=True)
@@ -35,12 +51,9 @@ class ExecutionConfig:
 @dataclass(frozen=True)
 class RenderConfig:
     root: Path
-    endpoint: str
-    model: str
-    api_key_env: str
-    concurrency: int = 2
-    timeout_seconds: float = 120
-    retries: int = 2
+    target: str
+    default_profile: str
+    profiles: dict[str, RenderProfile]
     output: OutputConfig = field(default_factory=OutputConfig)
     assembly: AssemblyConfig = field(default_factory=AssemblyConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
@@ -48,6 +61,8 @@ class RenderConfig:
 
 @dataclass(frozen=True)
 class CompiledStyle:
+    text: str
+    instruction: str | None = None
     values: dict[str, Any] | None = None
 
 
@@ -60,12 +75,13 @@ class RenderJob:
     text: str
     name: str
     text_type: str
-    style: dict[str, str] | None
+    style: Style | None
+    profile: RenderProfile
     voice: Voice
     chunk_index: int
     chunk_count: int
     cache_key: str
-    compiled_style: CompiledStyle = field(default_factory=CompiledStyle)
+    compiled_style: CompiledStyle
     scene_id: str | None = None
 
 
@@ -91,9 +107,29 @@ class RenderPlan:
 
 
 @dataclass(frozen=True)
+class PreparedRequest:
+    url: str
+    headers: dict[str, str]
+    json_body: dict[str, Any]
+    response_kind: str
+    audio_format: str
+    input_sample_rate: int | None = None
+
+
+@dataclass(frozen=True)
+class HttpResult:
+    body: bytes
+    headers: dict[str, str]
+    request_id: str | None
+    attempts: int
+    elapsed_ms: int
+
+
+@dataclass(frozen=True)
 class AudioResult:
     audio: bytes
     audio_format: str = "wav"
+    input_sample_rate: int | None = None
     request_id: str | None = None
     attempts: int = 1
     elapsed_ms: int = 0

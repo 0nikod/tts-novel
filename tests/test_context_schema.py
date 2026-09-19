@@ -53,5 +53,7 @@ def test_agent_context_is_bounded_and_complete(tmp_path: Path) -> None:
     assert context["current"]["lines"] == [{"line": 1, "text": "current"}]
     assert context["aliases"] == {"明明": "小明"}
     assert "name: 小明" in context["existing"]
+    assert set(context["style"]) == {"direction", "tags_before", "tags_after"}
     assert "[style]" in text
+    assert "direction:" in text
     json.dumps(context, ensure_ascii=False)

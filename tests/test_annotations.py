@@ -33,6 +33,50 @@ def test_sparse_defaults_and_canonical_save(tmp_path: Path) -> None:
     assert "type: thought" in content
 
 
+def test_freeform_style_round_trip(tmp_path: Path) -> None:
+    path = tmp_path / "001.yaml"
+    path.write_text(
+        "segments:\n"
+        "  - line: 2\n"
+        "    name: 小明\n"
+        "    style:\n"
+        "      direction: |-\n"
+        "        低声、迟疑，后半句逐渐疲惫。\n"
+        "      tags_before: [紧张, 深呼吸]\n"
+        "      tags_after: [苦笑]\n",
+        encoding="utf-8",
+    )
+
+    annotation = load_annotation(path)
+
+    assert annotation.segments[0].style == {
+        "direction": "低声、迟疑，后半句逐渐疲惫。",
+        "tags_before": ["紧张", "深呼吸"],
+        "tags_after": ["苦笑"],
+    }
+    save_annotation(path, annotation)
+    assert load_annotation(path) == annotation
+
+
+@pytest.mark.parametrize(
+    ("style", "message"),
+    [
+        ("direction: ''", "style.direction must be a non-empty string"),
+        ("tags_before: []", "style.tags_before must be a non-empty list"),
+        ("tags_after: [苦笑, 苦笑]", "style.tags_after must not contain duplicates"),
+        ("emotion: sad", "unsupported style fields: emotion"),
+    ],
+)
+def test_invalid_freeform_style_is_rejected(tmp_path: Path, style: str, message: str) -> None:
+    path = tmp_path / "001.yaml"
+    path.write_text(
+        f"segments:\n  - line: 1\n    name: 小明\n    style:\n      {style}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=message):
+        load_annotation(path)
+
+
 def test_old_chapter_field_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "001.yaml"
     path.write_text("chapter: 1\nsegments: []\n", encoding="utf-8")
@@ -59,14 +103,14 @@ def test_materialize_empty_and_sparse_annotation() -> None:
         processed(6),
         [
             Segment(LineRange(2, 2), "小明"),
-            Segment(LineRange(4, 5), "NARRATOR", "narration", {"pace": "slow"}),
+            Segment(LineRange(4, 5), "NARRATOR", "narration", {"direction": "缓慢朗读。"}),
         ],
     )
     assert [(item.line.format(), item.name, item.type, item.style) for item in effective] == [
         (1, "NARRATOR", "narration", None),
         (2, "小明", "dialogue", None),
         (3, "NARRATOR", "narration", None),
-        ("4-5", "NARRATOR", "narration", {"pace": "slow"}),
+        ("4-5", "NARRATOR", "narration", {"direction": "缓慢朗读。"}),
         (6, "NARRATOR", "narration", None),
     ]
 

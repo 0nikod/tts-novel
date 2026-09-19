@@ -50,7 +50,8 @@ segments:
     name: 孔乙己
     type: thought
     style:
-      emotion: nervous
+      direction: 声音压低，迟疑地说，后半句逐渐疲惫。
+      tags_before: [深呼吸]
   - line: 35
     name: UNKNOWN
     review: true
@@ -84,7 +85,9 @@ Do not add system names to `persons.yaml`. Do not replace an unresolved possible
 
 Quoted text is not automatically dialogue; documents, signs, titles, and recalled text require context. First-person exposition remains narrator speech, while explicitly represented internal words may be thought when the book enables it.
 
-Use only style identifiers printed by agent-context. Mark style only when the正文 explicitly supplies the reading information. Do not infer style from punctuation, carry it from a previous sentence, or invent a new value.
+Style is optional and has only three provider-neutral fields under `style`: free-form natural-language `direction`, ordered `tags_before`, and ordered `tags_after`. Tags are plain descriptions such as `深呼吸` or `苦笑`; never write provider syntax such as `(深呼吸)` or `[sigh]`.
+
+**Without clear textual or reliable contextual evidence, do not write style at all.** Do not infer style from punctuation alone, personality, a previous sentence, a preferred voice, or an imagined performance. Use the smallest direction or boundary tag supported by the evidence; do not routinely add director notes to ordinary lines.
 
 Narration, dialogue, and thought use the same style structure.
 

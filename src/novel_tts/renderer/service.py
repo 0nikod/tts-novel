@@ -6,21 +6,29 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Semaphore
 from typing import Any, Protocol
 
 from ..book import Book
 from .audio import concatenate_wav, duration_ms, normalize_audio, transcode_final
 from .cache import cache_path, copy_atomic, is_cache_hit
-from .custom_tts import CustomTTS, CustomTTSError
-from .models import AudioResult, RenderConfig, RenderIssue, RenderJob, RenderPlan, Voice
+from .config import render_target
+from .http import TTSRequestError
+from .models import (
+    AudioResult,
+    CompiledStyle,
+    RenderConfig,
+    RenderIssue,
+    RenderJob,
+    RenderPlan,
+    Voice,
+)
 from .planner import build_render_plan
+from .providers import create_runner
 
 
 class TTSBackend(Protocol):
-    def synthesize(
-        self, *, text: str, voice: Voice, style: dict[str, Any] | None
-    ) -> AudioResult: ...
+    def synthesize(self, *, text: str, voice: Voice, style: CompiledStyle) -> AudioResult: ...
 
 
 def run_render(
@@ -33,14 +41,24 @@ def run_render(
     if config is None or plan.errors:
         return plan, {}
 
-    output_root = config.root / "output"
-    manifest_path = config.root / "manifests" / "latest.json"
+    target = render_target(config)
+    output_root = config.root / "output" / target
+    manifest_path = config.root / "manifests" / f"{target}.json"
     output_root.mkdir(parents=True, exist_ok=True)
     (config.root / "cache").mkdir(parents=True, exist_ok=True)
     entries = [_manifest_entry(job, output_root) for job in plan.jobs]
+    used_profiles = {job.profile.id: job.profile for job in plan.jobs}
     manifest: dict[str, Any] = {
         "started_at": datetime.now(UTC).isoformat(),
-        "model": config.model,
+        "target": target,
+        "default_profile": config.default_profile,
+        "profiles": {
+            profile_id: {
+                "provider": profile.provider,
+                "model": profile.model,
+            }
+            for profile_id, profile in sorted(used_profiles.items())
+        },
         "chapter": chapter,
         "input_hashes": _input_hashes(book, config, plan),
         "jobs": entries,
@@ -50,18 +68,29 @@ def run_render(
     }
     _write_json_atomic(manifest_path, manifest)
 
-    active_backend = backend or CustomTTS(config)
-    owned_backend = backend is None
+    runners = (
+        {
+            profile_id: create_runner(config.root, profile)
+            for profile_id, profile in used_profiles.items()
+        }
+        if backend is None
+        else {}
+    )
+    limits = {
+        profile_id: Semaphore(profile.concurrency) for profile_id, profile in used_profiles.items()
+    }
     locks = {job.cache_key: Lock() for job in plan.jobs}
+    max_workers = max(1, sum(profile.concurrency for profile in used_profiles.values()))
     try:
-        with ThreadPoolExecutor(max_workers=config.concurrency) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(
                     _render_job,
                     job,
                     segment_path(output_root, job),
                     config,
-                    active_backend,
+                    backend if backend is not None else runners[job.profile.id],
+                    limits[job.profile.id],
                     locks[job.cache_key],
                 ): index
                 for index, job in enumerate(plan.jobs)
@@ -71,8 +100,8 @@ def run_render(
                 entries[index].update(future.result())
                 _write_json_atomic(manifest_path, manifest)
     finally:
-        if owned_backend and isinstance(active_backend, CustomTTS):
-            active_backend.close()
+        for runner in runners.values():
+            runner.close()
 
     manifest["completed"] = sum(entry["status"] == "completed" for entry in entries)
     manifest["failed"] = sum(entry["status"] == "failed" for entry in entries)
@@ -95,7 +124,7 @@ def assemble_render(
     plan, config = build_render_plan(book, chapter=chapter)
     if config is None or plan.errors:
         return plan, 0
-    output_root = config.root / "output"
+    output_root = config.root / "output" / render_target(config)
     completed: list[tuple[RenderJob, Path]] = []
     missing: list[RenderJob] = []
     for job in plan.jobs:
@@ -118,12 +147,13 @@ def _render_job(
     destination: Path,
     config: RenderConfig,
     backend: TTSBackend,
+    profile_limit: Semaphore,
     lock: Lock,
 ) -> dict[str, Any]:
     cached = cache_path(config.root, job.cache_key)
     entry: dict[str, Any] = {}
     try:
-        with lock:
+        with profile_limit, lock:
             if is_cache_hit(cached, config.output):
                 entry["cache"] = "hit"
             else:
@@ -131,7 +161,7 @@ def _render_job(
                 result = backend.synthesize(
                     text=job.text,
                     voice=job.voice,
-                    style=job.compiled_style.values,
+                    style=job.compiled_style,
                 )
                 raw_path = cached.with_name(f"{cached.stem}.part.{result.audio_format}")
                 raw_path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,6 +172,7 @@ def _render_job(
                         cached,
                         input_format=result.audio_format,
                         output=config.output,
+                        input_sample_rate=result.input_sample_rate,
                     )
                 finally:
                     raw_path.unlink(missing_ok=True)
@@ -156,10 +187,10 @@ def _render_job(
             copy_atomic(cached, destination)
         entry["duration_ms"] = duration_ms(destination)
         entry["status"] = "completed"
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, RuntimeError) as error:
         entry["status"] = "failed"
         entry["error"] = str(error)
-        if isinstance(error, CustomTTSError):
+        if isinstance(error, TTSRequestError):
             entry["attempts"] = error.attempts
             entry["elapsed_ms"] = error.elapsed_ms
     return entry
@@ -251,6 +282,9 @@ def _manifest_entry(job: RenderJob, output_root: Path) -> dict[str, Any]:
         else f"{job.line_start}-{job.line_end}",
         "name": job.name,
         "type": job.text_type,
+        "profile": job.profile.id,
+        "provider": job.profile.provider,
+        "model": job.profile.model,
         "voice": job.voice.id,
         "style": job.style,
         "cache_key": job.cache_key,
@@ -265,7 +299,6 @@ def _input_hashes(book: Book, config: RenderConfig, plan: RenderPlan) -> dict[st
         ("config_sha256", config.root / "config.yaml"),
         ("voice_used_sha256", config.root / "voice_used.yaml"),
         ("voices_sha256", config.root / "voices.yaml"),
-        ("styles_sha256", config.root / "styles.yaml"),
     ):
         if path.exists():
             result[label] = _sha256(path)

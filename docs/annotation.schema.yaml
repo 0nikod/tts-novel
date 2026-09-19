@@ -25,50 +25,26 @@ $defs:
     additionalProperties: false
     minProperties: 1
     properties:
-      emotion:
+      direction:
         type: string
-        enum:
-        - angry
-        - calm
-        - excited
-        - happy
-        - nervous
-        - sad
-        - shocked
-        description: Emotion explicitly stated by the text.
-      delivery:
-        type: string
-        enum:
-        - scolding
-        - shout
-        - whisper
-        description: Explicit manner of delivery.
-      volume:
-        type: string
-        enum:
-        - high
-        - low
-        description: Explicit relative vocal volume.
-      pace:
-        type: string
-        enum:
-        - fast
-        - slow
-        description: Explicit relative reading pace.
-      vocal_action_before:
-        type: string
-        enum:
-        - laugh
-        - sigh
-        - deep_breath
-        description: Explicit vocal action immediately before the text.
-      vocal_action_after:
-        type: string
-        enum:
-        - laugh
-        - sigh
-        - deep_breath
-        description: Explicit vocal action immediately after the text.
+        minLength: 1
+        description: Optional provider-neutral natural-language performance direction for the whole semantic segment.
+      tags_before:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+        description: Ordered provider-neutral free-text performance tags applied at the start of the semantic segment.
+      tags_after:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+        description: Ordered provider-neutral free-text performance tags applied at the end of the semantic segment.
   segment:
     type: object
     additionalProperties: false

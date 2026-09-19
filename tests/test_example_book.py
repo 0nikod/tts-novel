@@ -18,7 +18,7 @@ def test_example_book_is_sparse_and_valid() -> None:
     assert all(item.type == "dialogue" for item in segments)
 
 
-def test_example_book_builds_scene_optional_custom_plan() -> None:
+def test_example_book_builds_scene_optional_mimo_plan() -> None:
     book = Book(EXAMPLE)
     plan, _ = build_render_plan(book)
     assert plan.errors == []

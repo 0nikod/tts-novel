@@ -7,7 +7,6 @@ code-generation, and the renderer all consume these values directly.
 
 from __future__ import annotations
 
-from types import MappingProxyType
 from typing import Final
 
 DEFAULT_ANNOTATION_MODE: Final = "dialogue"
@@ -52,61 +51,32 @@ UNKNOWN_NAME: Final = "UNKNOWN"
 EXTRA_NAMES: Final = ("EXTRA", "EXTRA_MALE", "EXTRA_FEMALE")
 
 STYLE_SCHEMA: Final = {
-    "emotion": {
-        "description": "Emotion explicitly stated by the text.",
-        "values": {
-            "angry": "Angry.",
-            "calm": "Calm.",
-            "excited": "Excited.",
-            "happy": "Happy.",
-            "nervous": "Nervous.",
-            "sad": "Sad.",
-            "shocked": "Shocked.",
-        },
+    "direction": {
+        "description": (
+            "Optional provider-neutral natural-language performance direction for the whole "
+            "semantic segment."
+        ),
+        "kind": "direction",
     },
-    "delivery": {
-        "description": "Explicit manner of delivery.",
-        "values": {
-            "scolding": "Scolding or reprimanding.",
-            "shout": "Shouting.",
-            "whisper": "Whispering.",
-        },
+    "tags_before": {
+        "description": (
+            "Ordered provider-neutral free-text performance tags applied at the start of the "
+            "semantic segment."
+        ),
+        "kind": "tags",
     },
-    "volume": {
-        "description": "Explicit relative vocal volume.",
-        "values": {
-            "high": "High volume.",
-            "low": "Low volume.",
-        },
-    },
-    "pace": {
-        "description": "Explicit relative reading pace.",
-        "values": {
-            "fast": "Fast pace.",
-            "slow": "Slow pace.",
-        },
-    },
-    "vocal_action_before": {
-        "description": "Explicit vocal action immediately before the text.",
-        "values": {
-            "laugh": "Laugh before speaking.",
-            "sigh": "Sigh before speaking.",
-            "deep_breath": "Take a deep breath before speaking.",
-        },
-    },
-    "vocal_action_after": {
-        "description": "Explicit vocal action immediately after the text.",
-        "values": {
-            "laugh": "Laugh after speaking.",
-            "sigh": "Sigh after speaking.",
-            "deep_breath": "Take a deep breath after speaking.",
-        },
+    "tags_after": {
+        "description": (
+            "Ordered provider-neutral free-text performance tags applied at the end of the "
+            "semantic segment."
+        ),
+        "kind": "tags",
     },
 }
 
 STYLE_FIELDS: Final = tuple(STYLE_SCHEMA)
-STYLE_VALUES: Final = MappingProxyType(
-    {field: tuple(spec["values"]) for field, spec in STYLE_SCHEMA.items()}
+STYLE_TAG_FIELDS: Final = tuple(
+    field for field, spec in STYLE_SCHEMA.items() if spec["kind"] == "tags"
 )
 
 

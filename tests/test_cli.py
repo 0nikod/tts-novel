@@ -32,3 +32,11 @@ def test_removed_commands_are_not_exposed() -> None:
     assert "fill-annotations" not in result.stdout
     render = runner.invoke(app, ["render", "--help"])
     assert "capabilities" not in render.stdout
+    assert "providers" in render.stdout
+
+
+def test_render_providers_lists_custom_and_mimo() -> None:
+    result = runner.invoke(app, ["render", "providers"])
+    assert result.exit_code == 0, result.stdout
+    assert "custom: any model" in result.stdout
+    assert "mimo-v2.5-tts" in result.stdout

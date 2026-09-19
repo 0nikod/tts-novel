@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .annotation_schema import STYLE_VALUES, SYSTEM_NAMES
+from .annotation_schema import STYLE_SCHEMA, SYSTEM_NAMES
 from .book import Book
 from .persons import load_persons
 from .preprocessing import read_processed
@@ -51,7 +51,7 @@ def build_agent_context(
             {"name": name, "description": spec["description"]}
             for name, spec in SYSTEM_NAMES.items()
         ],
-        "style": {field: list(values) for field, values in STYLE_VALUES.items()},
+        "style": {field: spec["description"] for field, spec in STYLE_SCHEMA.items()},
         "persons": [person.name for person in people],
         "aliases": {alias: person.name for person in people for alias in person.aliases},
         "previous": {
@@ -78,7 +78,7 @@ def format_agent_context(context: dict[str, Any]) -> str:
     ]
     output.extend(item["name"] for item in context["system_names"])
     output.extend(["", "[style]"])
-    output.extend(f"{field}: {' '.join(values)}" for field, values in context["style"].items())
+    output.extend(f"{field}: {description}" for field, description in context["style"].items())
     output.extend(["", "[persons]"])
     output.extend(context["persons"] or ["(none)"])
     output.extend(["", "[aliases]"])

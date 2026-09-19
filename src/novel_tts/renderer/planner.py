@@ -8,17 +8,27 @@ from typing import Any
 from ..annotation_schema import SYSTEM_NAMES, UNKNOWN_NAME
 from ..annotations import load_annotation, materialize_annotation
 from ..book import Book
+from ..models import Style
 from ..persons import load_persons
 from ..preprocessing import read_processed
 from ..scenes import load_scenes, split_range_at_scenes
 from ..validation import validate_book
 from .config import load_render_config, load_voice_catalog, load_voice_usage, resolve_voice
-from .models import CompiledStyle, RenderConfig, RenderIssue, RenderJob, RenderPlan, Voice
-from .style import compile_style, load_style_mappings
+from .models import (
+    CompiledStyle,
+    RenderConfig,
+    RenderIssue,
+    RenderJob,
+    RenderPlan,
+    RenderProfile,
+    Voice,
+)
+from .providers import get_provider
+from .style import compile_style
 
 
 def validate_render_configuration(book: Book) -> tuple[list[RenderIssue], RenderConfig | None]:
-    """Validate custom backend configuration and the effective casting."""
+    """Validate provider configuration and the effective casting."""
     plan, config = build_render_plan(book)
     return plan.issues, config
 
@@ -35,9 +45,8 @@ def build_render_plan(
 
     try:
         config = load_render_config(book.root)
-        catalog = load_voice_catalog(config.root)
+        catalog = load_voice_catalog(config.root, config)
         usage = load_voice_usage(config.root, catalog)
-        style_mappings = load_style_mappings(config.root)
         people = load_persons(book.persons_path)
         scenes = load_scenes(book.scenes_path)
     except (OSError, ValueError) as error:
@@ -92,25 +101,50 @@ def build_render_plan(
         plan.issues.append(
             RenderIssue("ERROR", "Missing voices:\n  " + "\n  ".join(missing_voices))
         )
+
+    checked_voice_ids: set[str] = set()
+    for name in sorted(used_names - {UNKNOWN_NAME} - set(missing_voices)):
+        voice_id = usage[name]
+        if voice_id in checked_voice_ids:
+            continue
+        checked_voice_ids.add(voice_id)
+        try:
+            voice = resolve_voice(name, catalog, usage)
+        except ValueError as error:
+            plan.issues.append(RenderIssue("ERROR", str(error)))
+            continue
+        profile = config.profiles[voice.profile_id]
+        adapter = get_provider(profile.provider)
+        for message in adapter.validate_voice(config.root, profile, voice):
+            plan.issues.append(RenderIssue("ERROR", message))
     if plan.errors:
         return plan, config
 
     for stem, processed, effective in chapter_data:
         text_by_line = {line.number: line.text for line in processed}
         for segment in effective:
-            for lines, scene_id in split_range_at_scenes(scenes, stem, segment.line):
+            pieces = split_range_at_scenes(scenes, stem, segment.line)
+            for piece_index, (lines, scene_id) in enumerate(pieces, 1):
                 segment_text = "\n".join(
                     text_by_line[number] for number in range(lines.start, lines.end + 1)
                 )
                 chunks = split_text(segment_text, config.execution.max_chars_per_request)
                 voice = resolve_voice(segment.name, catalog, usage)
+                profile = config.profiles[voice.profile_id]
                 for chunk_index, text in enumerate(chunks, 1):
-                    chunk_style = style_for_chunk(segment.style, chunk_index, len(chunks))
-                    compiled = compile_style(chunk_style, style_mappings)
+                    chunk_style = style_for_chunk(
+                        segment.style,
+                        chunk_index,
+                        len(chunks),
+                        first_piece=piece_index == 1,
+                        last_piece=piece_index == len(pieces),
+                    )
+                    compiled = compile_style(profile.provider, text, chunk_style)
                     base_id = f"{stem}-{lines.start:06d}-{lines.end:06d}"
                     job_id = base_id if len(chunks) == 1 else f"{base_id}-c{chunk_index:03d}"
                     cache_key = make_cache_key(
                         config=config,
+                        profile=profile,
                         text=text,
                         voice=voice,
                         style=compiled,
@@ -125,6 +159,7 @@ def build_render_plan(
                             name=segment.name,
                             text_type=segment.type,
                             style=chunk_style,
+                            profile=profile,
                             voice=voice,
                             chunk_index=chunk_index,
                             chunk_count=len(chunks),
@@ -139,17 +174,24 @@ def build_render_plan(
 def make_cache_key(
     *,
     config: RenderConfig,
+    profile: RenderProfile,
     text: str,
     voice: Voice,
     style: CompiledStyle,
 ) -> str:
+    adapter = get_provider(profile.provider)
     data: dict[str, Any] = {
-        "cache_schema": 1,
-        "endpoint": config.endpoint,
-        "model": config.model,
+        "cache_schema": 4,
+        "provider": profile.provider,
+        "endpoint": profile.endpoint,
+        "model": profile.model,
+        "request": profile.request,
         "text": text,
-        "voice": {"id": voice.id, "parameters": voice.parameters},
-        "style": style.values,
+        "voice": {
+            "id": voice.id,
+            "parameters": adapter.voice_cache_data(config.root, profile, voice),
+        },
+        "style": asdict(style),
         "output": asdict(config.output),
     }
     encoded = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -157,17 +199,20 @@ def make_cache_key(
 
 
 def style_for_chunk(
-    style: dict[str, str] | None,
+    style: Style | None,
     chunk_index: int,
     chunk_count: int,
-) -> dict[str, str] | None:
-    if style is None or chunk_count == 1:
-        return style
+    *,
+    first_piece: bool = True,
+    last_piece: bool = True,
+) -> Style | None:
+    if style is None:
+        return None
     result = dict(style)
-    if chunk_index > 1:
-        result.pop("vocal_action_before", None)
-    if chunk_index < chunk_count:
-        result.pop("vocal_action_after", None)
+    if not first_piece or chunk_index > 1:
+        result.pop("tags_before", None)
+    if not last_piece or chunk_index < chunk_count:
+        result.pop("tags_after", None)
     return result or None
 
 

@@ -75,8 +75,8 @@ segments:
   - line: 11
     name: EXTRA
     style:
-      delivery: shout
-      volume: high
+      direction: 提高音量喊话，语速急促。
+      tags_before: [深呼吸]
 
   - line: 18
     name: 孔乙己
@@ -90,7 +90,8 @@ segments:
     name: NARRATOR
     type: narration
     style:
-      pace: slow
+      direction: 放慢语速，保持克制。
+      tags_after: [叹气]
 ```
 
 Canonical YAML 省略所有默认值：
@@ -158,7 +159,7 @@ thought
 
 只有 thought 需要显式 `type: thought`。Dialogue mode 中出现 thought 会导致 validation error。
 
-Narration、dialogue、thought 共用相同 style 结构。显式 narration segment 只用于覆盖默认 narration，例如设置 `pace: slow`。
+Narration、dialogue、thought 共用相同 style 结构。显式 narration segment 只用于覆盖默认 narration，例如提供有明确证据的自然语言 `direction`。
 
 ## Speaker 与 persons
 
@@ -224,32 +225,37 @@ novel-tts review BOOK
 
 ## Reading style
 
-Canonical vocabulary 的唯一人工维护来源是 `src/novel_tts/annotation_schema.py`：
+Style 使用轻量、开放、provider-neutral 的自然语言结构：
 
-```text
-emotion
-  angry calm excited happy nervous sad shocked
-delivery
-  scolding shout whisper
-volume
-  high low
-pace
-  fast slow
-vocal_action_before
-  laugh sigh deep_breath
-vocal_action_after
-  laugh sigh deep_breath
+```yaml
+style:
+  direction: |-
+    声音压低，略显迟疑，语速稍慢。
+    前半句保持镇定，后半句逐渐流露疲惫。
+  tags_before: [紧张, 深呼吸]
+  tags_after: [苦笑]
 ```
+
+只支持三个字段：
+
+| 字段 | 含义 |
+|---|---|
+| `direction` | 作用于整个 semantic segment 的非空自然语言表演指导 |
+| `tags_before` | segment 开头的有序、非空自由文本标签列表 |
+| `tags_after` | segment 结尾的有序、非空自由文本标签列表 |
+
+Annotation 只保存 `深呼吸`、`苦笑` 这样的语义文字，不保存 MiMo 的 `()` 或 Fish/ElevenLabs 的 `[]` 等 provider 语法。Renderer adapter 负责包装。
 
 Style 原则：
 
-- 正文明确给出时才标记；
-- 不从标点单独推断；
+- **没有明确的正文证据或可靠上下文证据时，完全不写 style**；
+- 不从标点、人物性格、偏好的声线或想象中的演出单独推断；
 - 不因上一句有 style 就自动延续；
-- 不使用 vocabulary 外的 identifier；
-- 一个 mapping 至少包含一个非空字段。
+- 使用证据支持的最短 direction 和最少标签；
+- 不为普通句子例行添加导演指令；
+- 一个 style 对象至少包含一个非空字段，标签不得为空或重复。
 
-`render/styles.yaml` 只能转换这些语义值，不能扩展 annotation vocabulary。
+自然语言 direction 是主要表示。不提供 `emotion`、`speed`、`pitch` 等结构化 provider 参数，也不承诺兼容只接受这类参数的 TTS。
 
 ## Agent workflow
 
@@ -321,7 +327,7 @@ Annotation 层检查：
 - segment range 有效、有序、不重叠、不越界；
 - name 是 canonical person 或 system name；
 - type 符合本书 annotation mode；
-- style 字段和值属于 canonical vocabulary；
+- style 只包含 direction、tags_before、tags_after，且内容非空；
 - UNKNOWN/review 约束。
 
 不检查 full coverage、chapter 字段或 scene membership。
@@ -336,4 +342,4 @@ uv run python -m novel_tts.schema_codegen
 novel-tts schema annotation --output docs/annotation.schema.yaml
 ```
 
-`test_generated_annotation_schema_is_current` 会比较生成结果与仓库文件。修改 mode、system name 或 style vocabulary 时，应修改 Python source of truth、重新生成 schema，再运行完整测试。
+`test_generated_annotation_schema_is_current` 会比较生成结果与仓库文件。修改 mode、system name 或 style 结构时，应修改 Python source of truth、重新生成 schema，再运行完整测试。

@@ -13,14 +13,20 @@ from .context import build_agent_context, format_agent_context
 from .persons import load_persons
 from .preprocessing import preprocess_file, read_processed
 from .renderer.cache import cache_path, is_cache_hit
-from .renderer.config import load_voice_catalog, load_voice_usage
+from .renderer.config import (
+    load_render_config,
+    load_voice_catalog,
+    load_voice_usage,
+    render_target,
+)
 from .renderer.planner import build_render_plan, validate_render_configuration
+from .renderer.providers import get_provider, provider_ids
 from .renderer.service import assemble_render, run_render
 from .schema_codegen import render_annotation_schema, write_annotation_schema
 from .validation import validate_book
 
 app = typer.Typer(no_args_is_help=True, help="Prepare, annotate, and render novels for TTS.")
-render_app = typer.Typer(no_args_is_help=True, help="Plan and run private custom TTS rendering.")
+render_app = typer.Typer(no_args_is_help=True, help="Plan and run multi-provider TTS rendering.")
 schema_app = typer.Typer(no_args_is_help=True, help="Generate machine-readable schemas.")
 app.add_typer(render_app, name="render")
 app.add_typer(schema_app, name="schema")
@@ -244,7 +250,8 @@ def status(book_path: Path = typer.Argument(..., exists=True, file_okay=False)) 
     typer.echo(f"Review items: {review_count}")
     typer.echo(f"Scenes: {'available' if book.scenes_path.exists() else 'not available'}")
     try:
-        catalog = load_voice_catalog(book.render_dir)
+        config = load_render_config(book.root)
+        catalog = load_voice_catalog(book.render_dir, config)
         usage = load_voice_usage(book.render_dir, catalog)
         configured = len(effective_names & set(usage))
         typer.echo(f"Casting: {configured}/{len(effective_names)} speakers configured")
@@ -264,14 +271,25 @@ def schema_annotation(
         typer.echo(output)
 
 
+@render_app.command("providers")
+def render_providers() -> None:
+    """List the built-in provider adapters and known models."""
+    for provider_id in provider_ids():
+        provider = get_provider(provider_id)
+        models = ", ".join(provider.models) if provider.models else "any model"
+        typer.echo(f"{provider_id}: {models}")
+
+
 @render_app.command("validate")
 def render_validate(book_path: Path = typer.Argument(..., exists=True, file_okay=False)) -> None:
-    """Validate custom backend configuration and all effective casting."""
+    """Validate provider configuration and all effective casting."""
     issues, config = validate_render_configuration(get_book(book_path))
     _print_render_issues(issues)
     if any(issue.severity == "ERROR" for issue in issues):
         raise typer.Exit(1)
-    typer.echo(f"Render configuration is valid for model {config.model if config else '-'}.")
+    target = config.target if config else "-"
+    profile_count = len(config.profiles) if config else 0
+    typer.echo(f"Render configuration is valid for target {target} ({profile_count} profile(s)).")
 
 
 @render_app.command("plan")
@@ -279,19 +297,30 @@ def render_plan_command(
     book_path: Path = typer.Argument(..., exists=True, file_okay=False),
     chapter: str | None = typer.Option(None, "--chapter", "-c"),
 ) -> None:
-    """Build a dry-run render plan without calling the custom API."""
+    """Build a dry-run render plan without calling a TTS API."""
     plan, config = build_render_plan(get_book(book_path), chapter=chapter)
     _print_render_issues(plan.issues)
-    hits = 0
+    hit_by_job: dict[str, bool] = {}
     if config is not None:
-        hits = sum(
-            is_cache_hit(cache_path(config.root, job.cache_key), config.output) for job in plan.jobs
-        )
+        hit_by_job = {
+            job.id: is_cache_hit(cache_path(config.root, job.cache_key), config.output)
+            for job in plan.jobs
+        }
+    hits = sum(hit_by_job.values())
     characters = sum(len(job.text) for job in plan.jobs)
+    target = config.target if config is not None else "-"
     typer.echo(
-        f"Plan: {len(plan.jobs)} job(s), {characters} character(s), "
+        f"Plan [{target}]: {len(plan.jobs)} job(s), {characters} character(s), "
         f"cache={hits} hit/{len(plan.jobs) - hits} miss"
     )
+    for profile_id in sorted({job.profile.id for job in plan.jobs}):
+        jobs = [job for job in plan.jobs if job.profile.id == profile_id]
+        profile_hits = sum(hit_by_job.get(job.id, False) for job in jobs)
+        typer.echo(
+            f"  {profile_id}: {len(jobs)} job(s), "
+            f"{sum(len(job.text) for job in jobs)} character(s), "
+            f"cache={profile_hits} hit/{len(jobs) - profile_hits} miss"
+        )
     if plan.errors:
         raise typer.Exit(1)
 
@@ -335,8 +364,13 @@ def render_assemble_command(
 
 @render_app.command("status")
 def render_status(book_path: Path = typer.Argument(..., exists=True, file_okay=False)) -> None:
-    """Show the latest render manifest status."""
-    path = get_book(book_path).render_dir / "manifests" / "latest.json"
+    """Show the configured mixed-profile target's render manifest status."""
+    book = get_book(book_path)
+    try:
+        config = load_render_config(book.root)
+    except (OSError, ValueError) as error:
+        _fail(str(error))
+    path = book.render_dir / "manifests" / f"{render_target(config)}.json"
     if not path.exists():
         typer.echo("No render manifest found.")
         return
@@ -344,8 +378,10 @@ def render_status(book_path: Path = typer.Argument(..., exists=True, file_okay=F
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         _fail(f"cannot read manifest: {error}")
+    profiles = ",".join(data.get("profiles", {})) or "-"
     typer.echo(
-        f"model={data.get('model', '-')} completed={data.get('completed', 0)} "
+        f"target={data.get('target', '-')} profiles={profiles} "
+        f"completed={data.get('completed', 0)} "
         f"failed={data.get('failed', 0)} "
         f"assembled={'yes' if data.get('assembled') else 'no'}"
     )

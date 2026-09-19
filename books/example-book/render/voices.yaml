@@ -1,9 +1,20 @@
 voices:
   narrator-main:
-    reference_id: narrator-001
+    mode: preset
+    voice: 冰糖
   male-young-01:
-    reference_id: male-young-001
-  male-old-01:
-    reference_id: male-old-003
+    mode: preset
+    voice: 苏打
+  manager-old-preset:
+    mode: preset
+    voice: 白桦
   female-young-01:
-    reference_id: female-young-002
+    mode: preset
+    voice: 茉莉
+  kong-designed:
+    profile: mimo-design
+    mode: design
+    description: |-
+      五十岁左右的落魄旧式男书生，偏低的男中音，声线干瘦而略带沙哑。
+      咬字带文人习气，仍努力维持体面，但能听出长期困顿造成的疲惫。
+    instruction: 保持自然的小说对白感，避免夸张舞台腔。
