@@ -7,14 +7,20 @@ from pathlib import Path
 
 import yaml
 
+from .annotation_schema import (
+    REVIEW_REASONS,
+    STYLE_FIELDS,
+    STYLE_VALUES,
+    SYSTEM_NAMES,
+    TEXT_TYPES,
+    UNKNOWN_NAME,
+)
 from .annotations import load_annotation
 from .book import Book
-from .models import REVIEW_REASONS, STYLE_FIELDS, SYSTEM_NAMES, ValidationIssue
+from .models import ValidationIssue
 from .persons import load_persons
 from .preprocessing import read_processed
 from .scenes import SCENE_ID_RE, load_scenes
-
-VALID_TYPES = {"narration", "dialogue", "thought"}
 
 
 class Validator:
@@ -131,7 +137,7 @@ class Validator:
                     elif owner[alias] != person.name:
                         self.error(path, f"alias {alias!r} conflicts with {owner[alias]}")
                 owner[alias] = person.name
-        return set(names) | SYSTEM_NAMES
+        return set(names) | set(SYSTEM_NAMES)
 
     def _validate_voices(self, people_names: set[str]) -> None:
         path = self.book.voices_path
@@ -281,7 +287,7 @@ class Validator:
                     covered[number] += 1
                 if segment.name not in people_names:
                     self.error(path, f"{label} references unknown person {segment.name!r}")
-                if segment.type not in VALID_TYPES:
+                if segment.type not in TEXT_TYPES:
                     self.error(path, f"{label} has invalid type {segment.type!r}")
                 self._validate_style(path, label, segment.style)
                 if segment.review:
@@ -289,8 +295,8 @@ class Validator:
                         self.error(path, f"{label} requires a valid review_reason")
                 elif segment.review_reason is not None:
                     self.error(path, f"{label} has review_reason without review: true")
-                if segment.name == "UNKNOWN" and not segment.review:
-                    self.warning(path, f"{label} uses UNKNOWN without review: true")
+                if segment.name == UNKNOWN_NAME and not segment.review:
+                    self.warning(path, f"{label} uses {UNKNOWN_NAME} without review: true")
 
                 scene = scenes.get(segment.scene_id)
                 if scene is None:
@@ -320,8 +326,17 @@ class Validator:
         if not style:
             self.warning(path, f"{label} should use style: null instead of an empty mapping")
         for key, value in style.items():
-            if value is not None and not isinstance(value, str):
+            if value is None:
+                continue
+            if not isinstance(value, str):
                 self.error(path, f"{label} style.{key} must be a string or null")
+                continue
+            if key in STYLE_VALUES and value not in STYLE_VALUES[key]:
+                allowed = ", ".join(STYLE_VALUES[key])
+                self.error(
+                    path,
+                    f"{label} style.{key} has invalid value {value!r}; allowed values: {allowed}",
+                )
 
     @staticmethod
     def _compact_numbers(numbers: Iterable[int]) -> str:

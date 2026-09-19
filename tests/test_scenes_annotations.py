@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from novel_tts.annotations import merge_adjacent_segments
+import pytest
+
+from novel_tts.annotations import load_annotation, merge_adjacent_segments
 from novel_tts.models import ChapterLineRange, LineRange, Scene, Segment
 from novel_tts.scenes import load_scenes, next_scene_id, save_scenes
 
@@ -17,6 +19,48 @@ def test_scene_round_trip_and_next_id(tmp_path: Path) -> None:
     save_scenes(path, scenes)
     assert load_scenes(path) == scenes
     assert next_scene_id(scenes) == "S0002"
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    [
+        ("type: speech", "invalid type 'speech'"),
+        ("review_reason: uncertain", "invalid review_reason 'uncertain'"),
+        ("style:\n      mood: sad", "unsupported style fields: mood"),
+        ("style:\n      emotion: furious", "invalid style.emotion value 'furious'"),
+        ("style:\n      emotion: []", "style.emotion must be a string or null"),
+    ],
+)
+def test_load_annotation_rejects_values_outside_canonical_schema(
+    tmp_path: Path, replacement: str, message: str
+) -> None:
+    path = tmp_path / "annotations.yaml"
+    if replacement.startswith("type:"):
+        type_line = replacement
+        review_line = ""
+        style_lines = "    style: null\n"
+    elif replacement.startswith("review_reason:"):
+        type_line = "type: dialogue"
+        review_line = f"    review: true\n    {replacement}\n"
+        style_lines = "    style: null\n"
+    else:
+        type_line = "type: dialogue"
+        review_line = ""
+        style_lines = f"    {replacement}\n"
+    path.write_text(
+        "chapter: 1\n"
+        "segments:\n"
+        "  - line: 1\n"
+        "    name: 小明\n"
+        f"    {type_line}\n"
+        f"{style_lines}"
+        "    scene_id: S0001\n"
+        f"{review_line}",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=message):
+        load_annotation(path)
 
 
 def test_merge_adjacent_segments() -> None:

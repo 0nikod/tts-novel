@@ -108,6 +108,22 @@ def test_same_scene_can_use_mimo_preset_profile(tmp_path: Path) -> None:
     assert {job.profile.model for job in plan.jobs} == {"mimo-v2.5-tts"}
 
 
+def test_structural_annotation_errors_stop_planning_without_exception(tmp_path: Path) -> None:
+    book = _make_render_book(tmp_path)
+    annotation_path = book.annotations_dir / "01.yaml"
+    content = annotation_path.read_text(encoding="utf-8")
+    annotation_path.write_text(
+        content.replace("    style: null\n", "    style:\n      emotion: []\n", 1),
+        encoding="utf-8",
+    )
+
+    plan, config = build_render_plan(book)
+
+    assert config is None
+    assert plan.jobs == []
+    assert any("style.emotion must be a string or null" in issue.message for issue in plan.errors)
+
+
 def test_text_split_is_bounded_and_lossless() -> None:
     text = "第一句很长。第二句也很长！第三句仍然很长，最后结束。"
 

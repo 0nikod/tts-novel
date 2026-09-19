@@ -284,7 +284,7 @@ Selection is currently per person, not per emotion or segment. Annotation style 
 
 ## `styles.yaml`
 
-This optional file overrides mappings from provider-neutral annotation style values to provider controls. An empty file can contain:
+This optional file overrides mappings from provider-neutral annotation style values to provider controls. The canonical annotation fields and values are defined in `src/novel_tts/annotation_schema.yaml`; overrides may remap those values, but they do not extend the annotation vocabulary. An empty file can contain:
 
 ```yaml
 {}
@@ -295,19 +295,19 @@ Example:
 ```yaml
 mimo:
   emotion:
-    dejected: 低落、沮丧
+    sad: 低落、沮丧
   delivery:
-    pleading: 恳求
+    whisper: 轻声、低语
   vocal_action_before:
-    chuckle: 轻笑
+    laugh: 轻笑
 
 fish_audio:
   emotion:
-    dejected: sad
+    sad: sad
   delivery:
-    pleading: pleading
+    whisper: whispering
   pace:
-    very_slow: 0.75
+    slow: 0.75
   volume_db:
     low: -4
 ```

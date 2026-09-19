@@ -1,0 +1,45 @@
+text_types:
+  - narration
+  - dialogue
+  - thought
+person_roles:
+  - main
+  - secondary
+  - minor
+system_names:
+  narrator: NARRATOR
+  unknown: UNKNOWN
+review_reasons:
+  - ambiguous_speaker
+  - ambiguous_type
+  - ambiguous_style
+  - ambiguous_scene
+  - unknown_character
+  - preprocess_error
+style_values:
+  emotion:
+    - angry
+    - calm
+    - excited
+    - happy
+    - nervous
+    - sad
+    - shocked
+  delivery:
+    - scolding
+    - shout
+    - whisper
+  volume:
+    - high
+    - low
+  pace:
+    - fast
+    - slow
+  vocal_action_before:
+    - laugh
+    - sigh
+    - deep_breath
+  vocal_action_after:
+    - laugh
+    - sigh
+    - deep_breath

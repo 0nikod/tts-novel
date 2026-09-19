@@ -8,6 +8,8 @@ compatibility: Requires the novel-tts project CLI and its standard book director
 
 Annotate one book in numeric chapter order. The source text is immutable. Never create `speaker_id` values. Annotation output is provider-neutral: do not read or modify render configuration, voice catalogs, voice selections, or provider-specific request data.
 
+`src/novel_tts/annotation_schema.yaml` is the source of truth for all annotation type, person role, system name, review reason, style field, and style value vocabularies. Consult its exported constants rather than maintaining or inventing values in this skill. In particular, every non-null style value must occur under its field in `STYLE_VALUES`; never create a free-form short English value.
+
 Read [annotation rules](references/annotation-rules.md) before making semantic decisions. Read [YAML examples](references/yaml-examples.md) when creating or repairing files.
 
 ## Inputs
@@ -32,7 +34,7 @@ Do not read only isolated dialogue lines. Speaker, prominence, and scene decisio
 novel-tts preprocess <book> --chapter <C>
 ```
 
-4. If preprocessing reports broken or ambiguous quotation boundaries, preserve its output and mark affected segments with `review: true` and `review_reason: preprocess_error`.
+4. If preprocessing reports broken or ambiguous quotation boundaries, preserve its output and mark affected segments for review using the schema's corresponding preprocessing reason.
 
 ## Workflow
 
@@ -45,27 +47,21 @@ Build a working list of canonical person names and aliases from `persons.yaml`. 
 For every line, determine:
 
 - canonical `name`
-- `type`: `narration`, `dialogue`, or `thought`
+- `type` from `TEXT_TYPES`
 - explicit `style`, otherwise `null`
 - linear `scene_id`
 
 Every processed line must be covered exactly once. A segment can contain only consecutive lines.
 
-Use `NARRATOR` for narration and `UNKNOWN` when the person genuinely cannot be resolved. Use canonical names in annotations, never aliases.
+Use the appropriate reserved name from `SYSTEM_NAMES` for narration or a genuinely unresolved person. Use canonical names in annotations, never aliases.
 
-Treat paratext sections such as `后记`, `作者后记`, `译者后记`, `作者注`, `译者注`, editorial notes, acknowledgements, and similar non-story material as a narrator-only region: assign `name: NARRATOR` to every line in the section, including quoted speech, signatures, and attributed remarks. Continue to classify each line's `type` from its textual form. Do not add people to `persons.yaml` solely because they are named or quoted in such a section.
+Treat paratext sections such as `后记`, `作者后记`, `译者后记`, `作者注`, `译者注`, editorial notes, acknowledgements, and similar non-story material as a narrator-only region: assign the narrator system name to every line in the section, including quoted speech, signatures, and attributed remarks. Continue to classify each line's `type` from its textual form. Do not add people to `persons.yaml` solely because they are named or quoted in such a section.
 
 ### 3. Classify character prominence and maintain people
 
-Classify story characters at book level as:
+Choose roles only from `PERSON_ROLES`, using the semantic guidance in the annotation rules. Judge narrative importance, recurrence, and likely future relevance from all available book context; do not classify by a rigid appearance-count threshold. When uncertain between a recurring distinct character and an incidental one, keep the person distinct rather than prematurely merging them.
 
-- `main`: protagonists and other characters who drive the central narrative.
-- `secondary`: recurring or narratively consequential characters with an identity that should remain distinct.
-- `minor`: infrequent, incidental extra speakers whose individual identity does not need a dedicated TTS voice.
-
-Judge narrative importance, recurrence, and likely future relevance from all available book context; do not classify by a rigid appearance-count threshold. A character is not `minor` merely because they appear only a few times in the current chapter. When uncertain between `secondary` and `minor`, keep the person distinct rather than prematurely merging them.
-
-Represent all `minor` characters with one canonical person:
+Represent all minor characters with one canonical person:
 
 ```yaml
 - name: EXTRA
@@ -73,11 +69,11 @@ Represent all `minor` characters with one canonical person:
   role: minor
 ```
 
-Use `name: EXTRA` in annotations for every confidently identified minor speaker. Do not add each minor person separately and do not put distinct people's names into `EXTRA.aliases`, because they are not aliases of one identity. This deliberate aggregation is for TTS casting; it does not mean the story characters are the same person. If a previously aggregated character later proves recurring or consequential, create a distinct `secondary` or `main` person and update all of that character's earlier annotations.
+Use `name: EXTRA` in annotations for every confidently identified minor speaker. Do not add each minor person separately and do not put distinct people's names into `EXTRA.aliases`, because they are not aliases of one identity. This deliberate aggregation is for TTS casting; it does not mean the story characters are the same person. If a previously aggregated character later proves recurring or consequential, create a distinct person with the appropriate schema role and update all of that character's earlier annotations.
 
-For each distinct `main` or `secondary` person established by the text, append an item containing `name`, `aliases`, and `role` to the `persons` list in `persons.yaml`. Add genuine textual variants under `aliases`. Do not create separate people for an alias, title, nickname, or pronoun. Do not declare `NARRATOR` or `UNKNOWN` in `persons.yaml`.
+For each distinct non-minor person established by the text, append an item containing `name`, `aliases`, and `role` to the `persons` list in `persons.yaml`. Add genuine textual variants under `aliases`. Do not create separate people for an alias, title, nickname, or pronoun. Do not declare reserved system names in `persons.yaml`.
 
-Do not invent biography, role, alias, or identity from weak evidence. Use `UNKNOWN` with human review when uncertainty could change whether the speaker is `EXTRA` or a distinct main/secondary character. Uncertainty only about which incidental minor person spoke may be annotated as `EXTRA` when that distinction has no effect on casting or narrative continuity.
+Do not invent biography, role, alias, or identity from weak evidence. Use the unknown system name with human review when uncertainty could change whether the speaker is `EXTRA` or a distinct character. Uncertainty only about which incidental minor person spoke may be annotated as `EXTRA` when that distinction has no effect on casting or narrative continuity.
 
 ### 4. Maintain scenes
 
@@ -87,16 +83,7 @@ Allocate new IDs monotonically (`S0001`, `S0002`, ...). Update each scene range 
 
 ### 5. Record uncertainty
 
-Use `review: true` plus exactly one suitable reason:
-
-- `ambiguous_speaker`
-- `ambiguous_type`
-- `ambiguous_style`
-- `ambiguous_scene`
-- `unknown_character`
-- `preprocess_error`
-
-Prefer an honest reviewed `UNKNOWN` over an unsupported speaker guess. Do not use review merely because inference required context; use it when meaningful uncertainty remains.
+Use `review: true` plus exactly one suitable value from `REVIEW_REASONS`. Prefer an honest reviewed unknown speaker over an unsupported speaker guess. Do not use review merely because inference required context; use it when meaningful uncertainty remains.
 
 ### 6. Write annotations
 

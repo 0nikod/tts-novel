@@ -64,3 +64,17 @@ def test_detects_scene_range_out_of_bounds(tmp_path: Path) -> None:
     )
     messages = [issue.message for issue in validate_book(book)]
     assert any("exceeds chapter length" in message for message in messages)
+
+
+def test_rejects_style_value_outside_canonical_vocabulary(tmp_path: Path) -> None:
+    book = make_book(tmp_path)
+    annotation_path = book.annotations_dir / "001.yaml"
+    content = annotation_path.read_text(encoding="utf-8")
+    annotation_path.write_text(
+        content.replace("    style: null\n", "    style:\n      emotion: furious\n", 1),
+        encoding="utf-8",
+    )
+
+    messages = [issue.message for issue in validate_book(book)]
+
+    assert any("invalid style.emotion value 'furious'" in message for message in messages)

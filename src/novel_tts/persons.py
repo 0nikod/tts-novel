@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
-from .models import SYSTEM_NAMES, Person
+from .annotation_schema import PERSON_ROLES, SYSTEM_NAMES, PersonRole
+from .models import Person
 
 
 def load_persons(path: Path) -> list[Person]:
@@ -42,9 +43,10 @@ def load_persons(path: Path) -> list[Person]:
             not isinstance(alias, str) or not alias.strip() for alias in aliases
         ):
             raise ValueError(f"person {index}: aliases must be a list of non-empty strings")
-        if role is not None and (not isinstance(role, str) or not role.strip()):
-            raise ValueError(f"person {index}: role must be a non-empty string or null")
-        people.append(Person(name=name, aliases=aliases, role=role))
+        if role not in PERSON_ROLES:
+            allowed = ", ".join(PERSON_ROLES)
+            raise ValueError(f"person {index}: invalid role {role!r}; allowed values: {allowed}")
+        people.append(Person(name=name, aliases=aliases, role=cast("PersonRole", role)))
     return people
 
 
@@ -65,7 +67,7 @@ def save_persons(path: Path, people: list[Person]) -> None:
 
 
 def person_names(people: list[Person]) -> set[str]:
-    return {person.name for person in people} | SYSTEM_NAMES
+    return {person.name for person in people} | set(SYSTEM_NAMES)
 
 
 def alias_map(people: list[Person]) -> dict[str, str]:

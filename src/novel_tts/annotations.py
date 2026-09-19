@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
-from .models import STYLE_FIELDS, Annotation, LineRange, Segment
+from .annotation_schema import REVIEW_REASONS, STYLE_FIELDS, STYLE_VALUES, TEXT_TYPES
+from .models import Annotation, LineRange, ReviewReason, Segment, TextType
 
 
 def load_annotation(path: Path) -> Annotation:
@@ -51,26 +52,54 @@ def load_annotation(path: Path) -> Annotation:
         style = item["style"]
         if style is not None and not isinstance(style, dict):
             raise ValueError(f"segment {index}: style must be null or a mapping")
-        if style is not None and any(not isinstance(key, str) for key in style):
-            raise ValueError(f"segment {index}: style field names must be strings")
+        if style is not None:
+            if any(not isinstance(key, str) for key in style):
+                raise ValueError(f"segment {index}: style field names must be strings")
+            unknown_style_fields = set(style) - set(STYLE_FIELDS)
+            if unknown_style_fields:
+                names = ", ".join(sorted(map(str, unknown_style_fields)))
+                raise ValueError(f"segment {index}: unsupported style fields: {names}")
+            for field, value in style.items():
+                if value is None:
+                    continue
+                if not isinstance(value, str):
+                    raise ValueError(f"segment {index}: style.{field} must be a string or null")
+                if value not in STYLE_VALUES[field]:
+                    allowed = ", ".join(STYLE_VALUES[field])
+                    raise ValueError(
+                        f"segment {index}: invalid style.{field} value {value!r}; "
+                        f"allowed values: {allowed}"
+                    )
         review = item.get("review", False)
         if not isinstance(review, bool):
             raise ValueError(f"segment {index}: review must be boolean")
         for key in ("name", "type", "scene_id"):
             if not isinstance(item[key], str):
                 raise ValueError(f"segment {index}: {key} must be a string")
+        if item["type"] not in TEXT_TYPES:
+            allowed_types = ", ".join(TEXT_TYPES)
+            raise ValueError(
+                f"segment {index}: invalid type {item['type']!r}; allowed values: {allowed_types}"
+            )
         review_reason = item.get("review_reason")
-        if review_reason is not None and not isinstance(review_reason, str):
-            raise ValueError(f"segment {index}: review_reason must be a string")
+        if review_reason is not None:
+            if not isinstance(review_reason, str):
+                raise ValueError(f"segment {index}: review_reason must be a string")
+            if review_reason not in REVIEW_REASONS:
+                allowed_reasons = ", ".join(REVIEW_REASONS)
+                raise ValueError(
+                    f"segment {index}: invalid review_reason {review_reason!r}; "
+                    f"allowed values: {allowed_reasons}"
+                )
         segments.append(
             Segment(
                 line=lines,
                 name=item["name"],
-                type=item["type"],
+                type=cast("TextType", item["type"]),
                 style=style,
                 scene_id=item["scene_id"],
                 review=review,
-                review_reason=review_reason,
+                review_reason=cast("ReviewReason | None", review_reason),
             )
         )
     return Annotation(chapter, segments)

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from ..annotation_schema import STYLE_VALUES
 from .models import CompiledStyle, RenderProfile
 
 FISH_TAGS: dict[str, dict[str, str]] = {
@@ -62,6 +65,76 @@ MIMO_ACTIONS = {
 }
 
 
+def validate_provider_default_mappings(
+    provider: str, mappings: Mapping[str, Mapping[str, Any]]
+) -> None:
+    """Reject annotation keys in provider defaults that are outside the shared taxonomy."""
+    for field, values in mappings.items():
+        if field not in STYLE_VALUES:
+            raise ValueError(f"{provider} default mappings contain unknown style field {field!r}")
+        invalid = set(values) - set(STYLE_VALUES[field])
+        if invalid:
+            invalid_values = ", ".join(sorted(map(repr, invalid)))
+            raise ValueError(
+                f"{provider} default mappings for {field} contain values outside "
+                f"STYLE_VALUES: {invalid_values}"
+            )
+
+
+validate_provider_default_mappings("fish_audio tags", FISH_TAGS)
+validate_provider_default_mappings(
+    "fish_audio controls", {"pace": FISH_PACE, "volume": FISH_VOLUME}
+)
+validate_provider_default_mappings("mimo terms", MIMO_TERMS)
+validate_provider_default_mappings(
+    "mimo actions",
+    {"vocal_action_before": MIMO_ACTIONS, "vocal_action_after": MIMO_ACTIONS},
+)
+
+
+def validate_style_mappings(mappings: Mapping[Any, Any]) -> None:
+    """Validate provider remaps without allowing them to extend annotation vocabulary."""
+    allowed_providers = {"fish_audio", "mimo"}
+    for provider, provider_mappings in mappings.items():
+        if provider not in allowed_providers:
+            raise ValueError(f"render/styles.yaml has unknown provider {provider!r}")
+        if not isinstance(provider_mappings, dict):
+            raise ValueError(f"render/styles.yaml {provider} must be a mapping")
+
+        allowed_fields = set(STYLE_VALUES)
+        if provider == "fish_audio":
+            allowed_fields.add("volume_db")
+        for field, values in provider_mappings.items():
+            if field not in allowed_fields:
+                raise ValueError(f"render/styles.yaml {provider} has unknown style field {field!r}")
+            if not isinstance(values, dict):
+                raise ValueError(f"render/styles.yaml {provider}.{field} must be a mapping")
+
+            annotation_field = "volume" if field == "volume_db" else field
+            canonical_values = STYLE_VALUES[annotation_field]
+            for value, output in values.items():
+                if value not in canonical_values:
+                    allowed = ", ".join(canonical_values)
+                    raise ValueError(
+                        f"render/styles.yaml {provider}.{field} has non-canonical annotation "
+                        f"value {value!r}; allowed values: {allowed}"
+                    )
+                numeric_output = provider == "fish_audio" and field in {"pace", "volume_db"}
+                if numeric_output:
+                    if (
+                        not isinstance(output, (int, float))
+                        or isinstance(output, bool)
+                        or not math.isfinite(output)
+                    ):
+                        raise ValueError(
+                            f"render/styles.yaml {provider}.{field}.{value} must be a finite number"
+                        )
+                elif not isinstance(output, str) or not output.strip():
+                    raise ValueError(
+                        f"render/styles.yaml {provider}.{field}.{value} must be a non-empty string"
+                    )
+
+
 def load_style_mappings(render_root: Path) -> dict[str, Any]:
     path = render_root / "styles.yaml"
     if not path.exists():
@@ -74,6 +147,7 @@ def load_style_mappings(render_root: Path) -> dict[str, Any]:
         return {}
     if not isinstance(data, dict):
         raise ValueError("render/styles.yaml root must be a mapping")
+    validate_style_mappings(data)
     return data
 
 

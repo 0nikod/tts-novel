@@ -5,6 +5,7 @@ import json
 from dataclasses import asdict
 from typing import Any
 
+from ..annotation_schema import SYSTEM_NAMES, UNKNOWN_NAME
 from ..annotations import load_annotation
 from ..book import Book
 from ..persons import load_persons
@@ -28,10 +29,9 @@ def validate_render_configuration(
     try:
         config = load_render_config(book.root)
         load_style_mappings(config.root)
-        known_names = {person.name for person in load_persons(book.persons_path)} | {
-            "NARRATOR",
-            "UNKNOWN",
-        }
+        known_names = {person.name for person in load_persons(book.persons_path)} | set(
+            SYSTEM_NAMES
+        )
         if profile_id is not None and profile_id not in config.profiles:
             raise ValueError(f"render profile {profile_id!r} does not exist")
         catalog = load_voice_catalog(config.root, config.profiles)
@@ -66,6 +66,8 @@ def build_render_plan(
     for issue in structural:
         if issue.severity == "ERROR":
             plan.issues.append(RenderIssue("ERROR", f"{issue.path}: {issue.message}"))
+    if plan.errors:
+        return plan, None
     try:
         config = load_render_config(book.root)
         style_mappings = load_style_mappings(config.root)
@@ -114,9 +116,9 @@ def build_render_plan(
                         base_job_id,
                     )
                 )
-            if segment.name == "UNKNOWN" and config.review.fail_on_unknown:
+            if segment.name == UNKNOWN_NAME and config.review.fail_on_unknown:
                 plan.issues.append(
-                    RenderIssue("ERROR", "UNKNOWN speaker cannot be rendered", base_job_id)
+                    RenderIssue("ERROR", f"{UNKNOWN_NAME} speaker cannot be rendered", base_job_id)
                 )
             source_text = "\n".join(
                 text_by_line[number] for number in range(segment.line.start, segment.line.end + 1)
